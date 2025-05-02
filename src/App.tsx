@@ -19,6 +19,9 @@ import CourseDetail from "@/pages/courses/CourseDetail";
 import LiveClasses from "@/pages/live/LiveClasses";
 import LiveSession from "@/pages/live/LiveSession";
 import AISuggestions from "@/pages/ai/AISuggestions";
+import AssignmentList from "@/pages/assignments/AssignmentList";
+import Profile from "@/pages/profile/Profile";
+import Notifications from "@/pages/notifications/Notifications";
 
 // Other pages
 import NotFound from "@/pages/NotFound";
@@ -64,6 +67,14 @@ const App = () => (
             </RequireAuth>
           } />
           
+          <Route path="/assignments" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <AssignmentList />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
           <Route path="/live-classes" element={
             <RequireAuth>
               <SidebarLayout>
@@ -76,6 +87,22 @@ const App = () => (
             <RequireAuth>
               <SidebarLayout>
                 <LiveSession />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          <Route path="/profile" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <Profile />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          <Route path="/notifications" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <Notifications />
               </SidebarLayout>
             </RequireAuth>
           } />
