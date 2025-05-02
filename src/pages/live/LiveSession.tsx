@@ -36,7 +36,7 @@ const mockChatMessages: ChatMessage[] = [
     id: '1',
     sender: 'Dr. Sarah Johnson',
     senderRole: 'instructor',
-    content: 'Welcome everyone to our physics problem-solving session! Today we'll be focusing on mechanics and Newton's laws.',
+    content: "Welcome everyone to our physics problem-solving session! Today we'll be focusing on mechanics and Newton's laws.",
     timestamp: new Date(Date.now() - 1200000) // 20 minutes ago
   },
   {
@@ -50,21 +50,21 @@ const mockChatMessages: ChatMessage[] = [
     id: '3',
     sender: 'Dr. Sarah Johnson',
     senderRole: 'instructor',
-    content: 'Let\'s start by reviewing the three laws of motion. Can anyone explain Newton\'s First Law?',
+    content: "Let's start by reviewing the three laws of motion. Can anyone explain Newton's First Law?",
     timestamp: new Date(Date.now() - 960000) // 16 minutes ago
   },
   {
     id: '4',
     sender: 'Emily Chen',
     senderRole: 'student',
-    content: 'Newton\'s First Law states that an object will remain at rest or in uniform motion in a straight line unless acted upon by an external force.',
+    content: "Newton's First Law states that an object will remain at rest or in uniform motion in a straight line unless acted upon by an external force.",
     timestamp: new Date(Date.now() - 900000) // 15 minutes ago
   },
   {
     id: '5',
     sender: 'Dr. Sarah Johnson',
     senderRole: 'instructor',
-    content: 'Excellent, Emily! That\'s exactly right. This principle is also known as the law of inertia.',
+    content: "Excellent, Emily! That's exactly right. This principle is also known as the law of inertia.",
     timestamp: new Date(Date.now() - 840000) // 14 minutes ago
   }
 ];
