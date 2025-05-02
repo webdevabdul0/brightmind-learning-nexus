@@ -1,8 +1,13 @@
 
 import { Navigate } from "react-router-dom";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const Index = () => {
-  return <Navigate to="/" replace />;
+  return (
+    <TooltipProvider>
+      <Navigate to="/" replace />
+    </TooltipProvider>
+  );
 };
 
 export default Index;
