@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { Bell, Check, Filter, Clock, BookOpen, Calendar, FileText, AlertCircle } from 'lucide-react';
+import { Bell, Check, Filter, Clock, BookOpen, Calendar, FileText, AlertCircle, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
