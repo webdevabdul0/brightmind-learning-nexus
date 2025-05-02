@@ -22,6 +22,8 @@ import AISuggestions from "@/pages/ai/AISuggestions";
 import AssignmentList from "@/pages/assignments/AssignmentList";
 import Profile from "@/pages/profile/Profile";
 import Notifications from "@/pages/notifications/Notifications";
+import Performance from "@/pages/performance/Performance";
+import Settings from "@/pages/settings/Settings";
 
 // Other pages
 import NotFound from "@/pages/NotFound";
@@ -103,6 +105,22 @@ const App = () => (
             <RequireAuth>
               <SidebarLayout>
                 <Notifications />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          <Route path="/performance" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <Performance />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          <Route path="/settings" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <Settings />
               </SidebarLayout>
             </RequireAuth>
           } />

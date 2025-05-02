@@ -13,7 +13,8 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
-  User
+  User,
+  MessageSquare
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -32,8 +33,8 @@ interface SidebarItemProps {
 const SidebarItem = ({ icon, label, to, active, collapsed }: SidebarItemProps) => {
   return (
     <Link to={to} className={cn(
-      'sidebar-item',
-      active && 'active',
+      'sidebar-item flex items-center gap-3 px-3 py-2 rounded-md text-white hover:bg-white/10 transition-all',
+      active && 'bg-white/20',
     )}>
       <div className="w-5 h-5">{icon}</div>
       {!collapsed && <span className="animate-fade-in">{label}</span>}
@@ -58,6 +59,7 @@ const SidebarLayout = ({ children }: Props) => {
     { icon: <FileText size={20} />, label: 'Assignments', to: '/assignments', roles: ['student', 'teacher', 'admin'] },
     { icon: <Video size={20} />, label: 'Live Classes', to: '/live-classes', roles: ['student', 'teacher', 'admin'] },
     { icon: <BarChart size={20} />, label: 'Performance', to: '/performance', roles: ['student', 'teacher', 'admin'] },
+    { icon: <MessageSquare size={20} />, label: 'AI Suggestions', to: '/ai-suggestions', roles: ['student', 'teacher', 'admin'] },
     { icon: <Bell size={20} />, label: 'Notifications', to: '/notifications', roles: ['student', 'teacher', 'admin'] },
     { icon: <User size={20} />, label: 'Profile', to: '/profile', roles: ['student', 'teacher', 'admin'] },
     { icon: <Settings size={20} />, label: 'Settings', to: '/settings', roles: ['student', 'teacher', 'admin'] },
