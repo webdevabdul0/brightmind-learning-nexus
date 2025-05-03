@@ -1,6 +1,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Search, Filter, FileText, Calendar, CheckCircle, AlertCircle, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,62 +10,17 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/components/ui/use-toast';
-
-// Mock data
-const mockAssignments = [
-  {
-    id: '1',
-    title: 'Physics Force and Motion Problems',
-    subject: 'Physics',
-    dueDate: new Date(2023, 5, 20),
-    status: 'pending',
-    progress: 0,
-    description: 'Complete the problem set on forces and motion including Newton\'s laws applications.'
-  },
-  {
-    id: '2',
-    title: 'Algebra Equations Worksheet',
-    subject: 'Mathematics',
-    dueDate: new Date(2023, 5, 15),
-    status: 'in-progress',
-    progress: 65,
-    description: 'Solve all the equations on the worksheet and show your work.'
-  },
-  {
-    id: '3',
-    title: 'English Literature Essay',
-    subject: 'English',
-    dueDate: new Date(2023, 5, 10),
-    status: 'completed',
-    progress: 100,
-    description: 'Write a 1000-word analytical essay on the themes in "To Kill a Mockingbird".'
-  },
-  {
-    id: '4',
-    title: 'Chemistry Lab Report',
-    subject: 'Chemistry',
-    dueDate: new Date(2023, 5, 25),
-    status: 'pending',
-    progress: 0,
-    description: 'Document the results of the acid-base titration lab and analyze the findings.'
-  },
-  {
-    id: '5',
-    title: 'History Research Project',
-    subject: 'History',
-    dueDate: new Date(2023, 5, 18),
-    status: 'in-progress',
-    progress: 30,
-    description: 'Research and create a presentation on a significant historical event of your choice.'
-  }
-];
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/providers/AuthProvider';
+import { supabase } from '@/integrations/supabase/client';
 
 interface AssignmentCardProps {
-  assignment: typeof mockAssignments[0];
+  assignment: any;
   onClick: () => void;
+  onUpload: (e: React.MouseEvent, assignmentId: string) => void;
 }
 
-const AssignmentCard = ({ assignment, onClick }: AssignmentCardProps) => {
+const AssignmentCard = ({ assignment, onClick, onUpload }: AssignmentCardProps) => {
   const { toast } = useToast();
   
   const getStatusColor = (status: string) => {
@@ -76,19 +32,11 @@ const AssignmentCard = ({ assignment, onClick }: AssignmentCardProps) => {
     }
   };
 
-  const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat('en-US', {
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
-    }).format(date);
-  };
-
-  const handleUpload = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    toast({
-      title: "Upload started",
-      description: "Your assignment is being uploaded.",
     });
   };
 
@@ -102,7 +50,7 @@ const AssignmentCard = ({ assignment, onClick }: AssignmentCardProps) => {
                assignment.status.charAt(0).toUpperCase() + assignment.status.slice(1)}
             </Badge>
             <CardTitle className="mt-2">{assignment.title}</CardTitle>
-            <CardDescription>{assignment.subject}</CardDescription>
+            <CardDescription>{assignment.course?.title || 'General'}</CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -111,15 +59,15 @@ const AssignmentCard = ({ assignment, onClick }: AssignmentCardProps) => {
         <div className="space-y-4">
           <div className="flex items-center text-sm">
             <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
-            <span>Due: {formatDate(assignment.dueDate)}</span>
+            <span>Due: {formatDate(assignment.due_date)}</span>
           </div>
           {(assignment.status === 'in-progress' || assignment.status === 'completed') && (
             <div className="space-y-1">
               <div className="flex items-center justify-between text-sm">
                 <span>Progress</span>
-                <span>{assignment.progress}%</span>
+                <span>{assignment.progress || 0}%</span>
               </div>
-              <Progress value={assignment.progress} className="h-2" />
+              <Progress value={assignment.progress || 0} className="h-2" />
             </div>
           )}
         </div>
@@ -131,7 +79,10 @@ const AssignmentCard = ({ assignment, onClick }: AssignmentCardProps) => {
             View Details
           </Button>
           {assignment.status !== 'completed' && (
-            <Button size="sm" onClick={handleUpload}>
+            <Button 
+              size="sm" 
+              onClick={(e) => onUpload(e, assignment.id)}
+            >
               <Upload className="h-4 w-4 mr-1" />
               Submit
             </Button>
@@ -143,13 +94,70 @@ const AssignmentCard = ({ assignment, onClick }: AssignmentCardProps) => {
 };
 
 const AssignmentList = () => {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const navigate = useNavigate();
+  const { toast } = useToast();
+  
+  // Fetch assignments
+  const { data: assignments = [], isLoading } = useQuery({
+    queryKey: ['assignments', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      
+      const { data, error } = await supabase
+        .from('assignments')
+        .select(`
+          *,
+          course:courses(id, title)
+        `)
+        .order('due_date');
+        
+      if (error) {
+        toast({
+          title: "Error fetching assignments",
+          description: error.message,
+          variant: "destructive"
+        });
+        throw error;
+      }
+      
+      // Fetch submission status for each assignment
+      const assignmentsWithStatus = await Promise.all(
+        data.map(async (assignment) => {
+          const { data: submission } = await supabase
+            .from('assignment_submissions')
+            .select('*')
+            .eq('assignment_id', assignment.id)
+            .eq('student_id', user.id)
+            .single();
+          
+          let status = 'pending';
+          let progress = 0;
+          
+          if (submission) {
+            status = submission.status;
+            progress = status === 'completed' ? 100 : 
+                      status === 'in-progress' ? 65 : 0;
+          }
+          
+          return {
+            ...assignment,
+            status,
+            progress
+          };
+        })
+      );
+      
+      return assignmentsWithStatus;
+    },
+    enabled: !!user
+  });
 
-  const filteredAssignments = mockAssignments.filter(assignment => {
+  const filteredAssignments = assignments.filter(assignment => {
     const matchesSearch = assignment.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         assignment.subject.toLowerCase().includes(searchQuery.toLowerCase());
+                         (assignment.course?.title && assignment.course.title.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesStatus = selectedStatus === 'all' || assignment.status === selectedStatus;
     return matchesSearch && matchesStatus;
   });
@@ -158,15 +166,42 @@ const AssignmentList = () => {
     navigate(`/assignments/${assignmentId}`);
   };
 
-  const pendingCount = mockAssignments.filter(a => a.status === 'pending').length;
-  const inProgressCount = mockAssignments.filter(a => a.status === 'in-progress').length;
-  const completedCount = mockAssignments.filter(a => a.status === 'completed').length;
+  const handleUpload = (e: React.MouseEvent, assignmentId: string) => {
+    e.stopPropagation();
+    toast({
+      title: "Upload started",
+      description: "Your assignment is being uploaded.",
+    });
+  };
+
+  const pendingCount = assignments.filter(a => a.status === 'pending').length;
+  const inProgressCount = assignments.filter(a => a.status === 'in-progress').length;
+  const completedCount = assignments.filter(a => a.status === 'completed').length;
+
+  // Render skeleton loaders
+  const renderSkeletons = (count: number) => {
+    return Array(count).fill(0).map((_, i) => (
+      <div key={i} className="rounded-xl p-6 bg-slate-100">
+        <div className="space-y-3">
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-6 w-3/4" />
+          <Skeleton className="h-4 w-1/3" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-4 w-1/2" />
+          <div className="flex justify-between pt-2">
+            <Skeleton className="h-8 w-24" />
+            <Skeleton className="h-8 w-24" />
+          </div>
+        </div>
+      </div>
+    ));
+  };
 
   return (
     <div className="container mx-auto animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
-          <h1 className="text-4xl font-bold mb-2">Assignments</h1>
+          <h1 className="text-3xl md:text-4xl font-bold mb-2">Assignments</h1>
           <p className="text-gray-600">Manage and track your assignments</p>
         </div>
         <div className="flex items-center gap-4 w-full md:w-auto">
@@ -187,7 +222,7 @@ const AssignmentList = () => {
       </div>
 
       {/* Assignment Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8">
         <Card className="bg-amber-50 border-amber-200">
           <CardHeader className="pb-2">
             <CardTitle className="text-amber-700 flex items-center">
@@ -238,13 +273,18 @@ const AssignmentList = () => {
         </TabsList>
         
         <TabsContent value="all" className="mt-6">
-          {filteredAssignments.length > 0 ? (
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {renderSkeletons(6)}
+            </div>
+          ) : filteredAssignments.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredAssignments.map(assignment => (
                 <AssignmentCard 
                   key={assignment.id}
                   assignment={assignment}
                   onClick={() => handleAssignmentClick(assignment.id)}
+                  onUpload={handleUpload}
                 />
               ))}
             </div>
@@ -261,43 +301,92 @@ const AssignmentList = () => {
           )}
         </TabsContent>
         
+        {/* Content for other tabs is similar but filtered, using the same components */}
         <TabsContent value="pending" className="mt-6">
-          {/* Similar content to 'all' tab but filtered for pending */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredAssignments.map(assignment => (
-              <AssignmentCard 
-                key={assignment.id}
-                assignment={assignment}
-                onClick={() => handleAssignmentClick(assignment.id)}
-              />
-            ))}
-          </div>
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {renderSkeletons(3)}
+            </div>
+          ) : filteredAssignments.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredAssignments.map(assignment => (
+                <AssignmentCard 
+                  key={assignment.id}
+                  assignment={assignment}
+                  onClick={() => handleAssignmentClick(assignment.id)}
+                  onUpload={handleUpload}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-muted/40 rounded-lg p-8 text-center">
+              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">No pending assignments</h3>
+              <p className="text-muted-foreground mb-4">You don't have any pending assignments at the moment.</p>
+              <Button onClick={() => {
+                setSearchQuery('');
+                setSelectedStatus('all');
+              }}>View all assignments</Button>
+            </div>
+          )}
         </TabsContent>
         
         <TabsContent value="in-progress" className="mt-6">
-          {/* Similar content to 'all' tab but filtered for in-progress */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredAssignments.map(assignment => (
-              <AssignmentCard 
-                key={assignment.id}
-                assignment={assignment}
-                onClick={() => handleAssignmentClick(assignment.id)}
-              />
-            ))}
-          </div>
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {renderSkeletons(2)}
+            </div>
+          ) : filteredAssignments.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredAssignments.map(assignment => (
+                <AssignmentCard 
+                  key={assignment.id}
+                  assignment={assignment}
+                  onClick={() => handleAssignmentClick(assignment.id)}
+                  onUpload={handleUpload}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-muted/40 rounded-lg p-8 text-center">
+              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">No in-progress assignments</h3>
+              <p className="text-muted-foreground mb-4">You don't have any assignments in progress.</p>
+              <Button onClick={() => {
+                setSearchQuery('');
+                setSelectedStatus('all');
+              }}>View all assignments</Button>
+            </div>
+          )}
         </TabsContent>
         
         <TabsContent value="completed" className="mt-6">
-          {/* Similar content to 'all' tab but filtered for completed */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredAssignments.map(assignment => (
-              <AssignmentCard 
-                key={assignment.id}
-                assignment={assignment}
-                onClick={() => handleAssignmentClick(assignment.id)}
-              />
-            ))}
-          </div>
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {renderSkeletons(2)}
+            </div>
+          ) : filteredAssignments.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredAssignments.map(assignment => (
+                <AssignmentCard 
+                  key={assignment.id}
+                  assignment={assignment}
+                  onClick={() => handleAssignmentClick(assignment.id)}
+                  onUpload={handleUpload}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-muted/40 rounded-lg p-8 text-center">
+              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">No completed assignments</h3>
+              <p className="text-muted-foreground mb-4">You haven't completed any assignments yet.</p>
+              <Button onClick={() => {
+                setSearchQuery('');
+                setSelectedStatus('all');
+              }}>View all assignments</Button>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

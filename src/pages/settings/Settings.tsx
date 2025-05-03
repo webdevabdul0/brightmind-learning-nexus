@@ -1,5 +1,6 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,19 +9,53 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Check, Save } from 'lucide-react';
+import { Check, Save, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { supabase } from '@/integrations/supabase/client';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const Settings = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
+  // Fetch user settings
+  const { data: userSettings, isLoading: isLoadingSettings } = useQuery({
+    queryKey: ['userSettings', user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+
+      const { data, error } = await supabase
+        .from('user_settings')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        toast({
+          title: "Error fetching settings",
+          description: error.message,
+          variant: "destructive"
+        });
+        throw error;
+      }
+
+      return data || {
+        theme: 'light',
+        email_notifications: true,
+        browser_notifications: true,
+        language: 'english'
+      };
+    },
+    enabled: !!user
+  });
   
   // Profile settings
-  const [name, setName] = useState(user?.name || '');
-  const [email, setEmail] = useState(user?.email || '');
-  const [phone, setPhone] = useState('');
-  const [bio, setBio] = useState('');
+  const [name, setName] = useState(profile?.name || '');
+  const [email, setEmail] = useState(profile?.email || '');
+  const [phone, setPhone] = useState(profile?.phone || '');
+  const [bio, setBio] = useState(profile?.bio || '');
   
   // Notification settings
   const [emailNotifications, setEmailNotifications] = useState(true);
@@ -38,31 +73,158 @@ const Settings = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
+  // Update state with fetched settings
+  useEffect(() => {
+    if (userSettings) {
+      setTheme(userSettings.theme || 'light');
+      setEmailNotifications(userSettings.email_notifications || true);
+      setBrowserNotifications(userSettings.browser_notifications || true);
+      setLanguage(userSettings.language || 'english');
+    }
+  }, [userSettings]);
+
+  // Update user profile mutation
+  const updateProfileMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error('User not logged in');
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          name,
+          email,
+          phone,
+          bio
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userProfile', user?.id] });
+      toast({
+        title: "Profile updated",
+        description: "Your profile information has been updated.",
+        duration: 3000,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update failed",
+        description: error.message,
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  });
+
+  // Update notification settings mutation
+  const updateNotificationSettingsMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error('User not logged in');
+
+      const { error } = await supabase
+        .from('user_settings')
+        .update({
+          email_notifications: emailNotifications,
+          browser_notifications: browserNotifications
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userSettings', user?.id] });
+      toast({
+        title: "Notification settings updated",
+        description: "Your notification preferences have been saved.",
+        duration: 3000,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update failed",
+        description: error.message,
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  });
+
+  // Update appearance settings mutation
+  const updateAppearanceSettingsMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error('User not logged in');
+
+      const { error } = await supabase
+        .from('user_settings')
+        .update({
+          theme,
+          language
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userSettings', user?.id] });
+      toast({
+        title: "Appearance settings updated",
+        description: "Your display preferences have been saved.",
+        duration: 3000,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update failed",
+        description: error.message,
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  });
+
+  // Change password mutation
+  const changePasswordMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Password updated",
+        description: "Your password has been changed successfully.",
+        duration: 3000,
+      });
+      
+      // Reset the form
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Password update failed",
+        description: error.message,
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  });
+
   const handleProfileUpdate = () => {
-    // Here you would update the user's profile in Supabase
-    toast({
-      title: "Profile updated",
-      description: "Your profile information has been updated.",
-      duration: 3000,
-    });
+    updateProfileMutation.mutate();
   };
 
   const handleNotificationSettingsUpdate = () => {
-    // Here you would update the notification settings in Supabase
-    toast({
-      title: "Notification settings updated",
-      description: "Your notification preferences have been saved.",
-      duration: 3000,
-    });
+    updateNotificationSettingsMutation.mutate();
   };
 
   const handleAppearanceSettingsUpdate = () => {
-    // Here you would update the appearance settings in Supabase
-    toast({
-      title: "Appearance settings updated",
-      description: "Your display preferences have been saved.",
-      duration: 3000,
-    });
+    updateAppearanceSettingsMutation.mutate();
   };
 
   const handlePasswordChange = () => {
@@ -76,22 +238,25 @@ const Settings = () => {
       return;
     }
 
-    // Here you would update the password in Supabase Auth
-    toast({
-      title: "Password updated",
-      description: "Your password has been changed successfully.",
-      duration: 3000,
-    });
-
-    // Reset the form
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
+    changePasswordMutation.mutate();
   };
+
+  // Render skeletons while loading
+  if (isLoadingSettings) {
+    return (
+      <div className="container mx-auto animate-fade-in">
+        <Skeleton className="h-10 w-48 mb-8" />
+        <Skeleton className="h-10 w-full mb-6" />
+        <div className="space-y-6">
+          <Skeleton className="h-80 w-full" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto animate-fade-in">
-      <h1 className="text-4xl font-bold mb-8">Settings</h1>
+      <h1 className="text-3xl md:text-4xl font-bold mb-8">Settings</h1>
 
       <Tabs defaultValue="profile" className="mb-8">
         <TabsList className="mb-6">
@@ -146,7 +311,7 @@ const Settings = () => {
                   <Label htmlFor="role">Role</Label>
                   <Input
                     id="role"
-                    value={user?.role || ''}
+                    value={profile?.role || ''}
                     disabled
                     readOnly
                   />
@@ -163,9 +328,21 @@ const Settings = () => {
                 />
               </div>
               
-              <Button onClick={handleProfileUpdate}>
-                <Save className="mr-2 h-4 w-4" />
-                Save Changes
+              <Button 
+                onClick={handleProfileUpdate} 
+                disabled={updateProfileMutation.isPending}
+              >
+                {updateProfileMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Save Changes
+                  </>
+                )}
               </Button>
             </CardContent>
           </Card>
@@ -226,9 +403,21 @@ const Settings = () => {
                 </div>
               </div>
               
-              <Button onClick={handleNotificationSettingsUpdate}>
-                <Save className="mr-2 h-4 w-4" />
-                Save Preferences
+              <Button 
+                onClick={handleNotificationSettingsUpdate}
+                disabled={updateNotificationSettingsMutation.isPending}
+              >
+                {updateNotificationSettingsMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Save Preferences
+                  </>
+                )}
               </Button>
             </CardContent>
           </Card>
@@ -246,7 +435,7 @@ const Settings = () => {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Theme</Label>
-                  <RadioGroup value={theme} onValueChange={setTheme} className="flex space-x-2">
+                  <RadioGroup value={theme} onValueChange={setTheme} className="flex flex-wrap gap-4">
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="light" id="light" />
                       <Label htmlFor="light">Light</Label>
@@ -293,9 +482,21 @@ const Settings = () => {
                 </div>
               </div>
               
-              <Button onClick={handleAppearanceSettingsUpdate}>
-                <Save className="mr-2 h-4 w-4" />
-                Save Settings
+              <Button 
+                onClick={handleAppearanceSettingsUpdate}
+                disabled={updateAppearanceSettingsMutation.isPending}
+              >
+                {updateAppearanceSettingsMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Save Settings
+                  </>
+                )}
               </Button>
             </CardContent>
           </Card>
@@ -347,9 +548,21 @@ const Settings = () => {
                 </div>
               </div>
               
-              <Button onClick={handlePasswordChange}>
-                <Check className="mr-2 h-4 w-4" />
-                Update Password
+              <Button 
+                onClick={handlePasswordChange}
+                disabled={changePasswordMutation.isPending}
+              >
+                {changePasswordMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <Check className="mr-2 h-4 w-4" />
+                    Update Password
+                  </>
+                )}
               </Button>
             </CardContent>
           </Card>

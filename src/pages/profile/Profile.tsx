@@ -1,5 +1,6 @@
 
 import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   User, 
   Mail, 
@@ -11,7 +12,8 @@ import {
   Upload,
   School,
   MapPin,
-  Phone
+  Phone,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,29 +23,85 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/providers/AuthProvider';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
+import { supabase } from '@/integrations/supabase/client';
 
 const Profile = () => {
-  const { user } = useAuth();
+  const { user, profile, updateProfile } = useAuth();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
+  const queryClient = useQueryClient();
   
-  // Mock profile data
-  const [profileData, setProfileData] = useState({
-    name: user?.name || 'Student Name',
-    email: user?.email || 'student@example.com',
-    phone: '+1 (555) 123-4567',
-    school: 'Cambridge International School',
-    address: 'London, United Kingdom',
-    grade: '11th Grade',
-    bio: 'Passionate science student focusing on physics and mathematics. Looking forward to pursuing engineering in university.'
+  // Form state
+  const [profileForm, setProfileForm] = useState({
+    name: profile?.name || '',
+    email: profile?.email || '',
+    phone: profile?.phone || '',
+    school: profile?.school || '',
+    address: profile?.address || '',
+    grade: profile?.grade || '',
+    bio: profile?.bio || ''
+  });
+
+  // Fetch enrolled courses
+  const { data: enrolledCourses = [], isLoading: isLoadingCourses } = useQuery({
+    queryKey: ['userEnrolledCourses', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      
+      const { data, error } = await supabase
+        .from('enrollments')
+        .select(`
+          *,
+          course:courses(*)
+        `)
+        .eq('student_id', user.id);
+        
+      if (error) {
+        toast({
+          title: "Error fetching courses",
+          description: error.message,
+          variant: "destructive"
+        });
+        throw error;
+      }
+      
+      return data || [];
+    },
+    enabled: !!user
+  });
+
+  // Mock achievements data (to be implemented with real data)
+  const achievements = [
+    { id: '1', title: 'Physics Quiz Champion', date: 'May 15, 2023', badge: '🏆' },
+    { id: '2', title: 'Perfect Attendance', date: 'April 2023', badge: '🌟' },
+    { id: '3', title: 'Math Problem Solver', date: 'March 20, 2023', badge: '🧩' },
+    { id: '4', title: 'Essay Competition Finalist', date: 'February 10, 2023', badge: '📝' }
+  ];
+
+  // Update profile mutation
+  const updateProfileMutation = useMutation({
+    mutationFn: async (updatedProfile: any) => {
+      await updateProfile(updatedProfile);
+    },
+    onSuccess: () => {
+      setIsEditing(false);
+      toast({
+        title: "Profile updated",
+        description: "Your profile has been saved successfully."
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
   });
 
   const handleSaveProfile = () => {
-    setIsEditing(false);
-    toast({
-      title: "Profile updated",
-      description: "Your profile has been saved successfully.",
-    });
+    updateProfileMutation.mutate(profileForm);
   };
 
   const handleUploadPhoto = () => {
@@ -53,27 +111,34 @@ const Profile = () => {
     });
   };
 
-  // Mock courses data
-  const enrolledCourses = [
-    { id: '1', title: 'Introduction to Physics', progress: 58 },
-    { id: '2', title: 'Advanced Mathematics for O Levels', progress: 75 },
-    { id: '3', title: 'English Literature Essentials', progress: 32 }
-  ];
+  // Update form state
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setProfileForm(prev => ({ ...prev, [name]: value }));
+  };
 
-  // Mock achievements data
-  const achievements = [
-    { id: '1', title: 'Physics Quiz Champion', date: 'May 15, 2023', badge: '🏆' },
-    { id: '2', title: 'Perfect Attendance', date: 'April 2023', badge: '🌟' },
-    { id: '3', title: 'Math Problem Solver', date: 'March 20, 2023', badge: '🧩' },
-    { id: '4', title: 'Essay Competition Finalist', date: 'February 10, 2023', badge: '📝' }
-  ];
+  // Render course skeletons
+  const renderCourseSkeletons = () => {
+    return Array(3).fill(0).map((_, i) => (
+      <div key={i} className="bg-slate-50 p-4 rounded-lg">
+        <Skeleton className="h-6 w-3/4 mb-2" />
+        <div className="space-y-1 mt-4">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-4 w-1/6" />
+          </div>
+          <Skeleton className="h-2 w-full mt-1" />
+        </div>
+      </div>
+    ));
+  };
 
   return (
     <div className="container mx-auto animate-fade-in pb-10">
-      <h1 className="text-4xl font-bold mb-8">My Profile</h1>
+      <h1 className="text-3xl md:text-4xl font-bold mb-8">My Profile</h1>
       
       <Tabs defaultValue="personal" className="mb-8">
-        <TabsList>
+        <TabsList className="mb-6">
           <TabsTrigger value="personal">Personal Info</TabsTrigger>
           <TabsTrigger value="courses">My Courses</TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
@@ -86,8 +151,8 @@ const Profile = () => {
               <CardHeader className="pb-2 flex flex-col items-center">
                 <div className="relative">
                   <Avatar className="h-32 w-32 mb-4">
-                    <AvatarImage src="/placeholder.svg" alt={profileData.name} />
-                    <AvatarFallback className="text-4xl">{profileData.name.charAt(0)}</AvatarFallback>
+                    <AvatarImage src={profile?.avatar_url || "/placeholder.svg"} alt={profile?.name || 'User'} />
+                    <AvatarFallback className="text-4xl">{profile?.name?.charAt(0) || 'U'}</AvatarFallback>
                   </Avatar>
                   <Button 
                     variant="outline" 
@@ -98,10 +163,10 @@ const Profile = () => {
                     <Upload className="h-4 w-4" />
                   </Button>
                 </div>
-                <CardTitle className="text-center text-2xl">{profileData.name}</CardTitle>
+                <CardTitle className="text-center text-2xl">{profile?.name || 'User'}</CardTitle>
                 <div className="flex items-center text-muted-foreground gap-1 mt-1">
                   <School className="h-4 w-4" />
-                  <span className="text-sm">{profileData.grade}</span>
+                  <span className="text-sm">{profile?.grade || 'Student'}</span>
                 </div>
               </CardHeader>
               <CardContent>
@@ -110,7 +175,7 @@ const Profile = () => {
                     <Mail className="h-5 w-5 mr-3 text-muted-foreground mt-0.5" />
                     <div>
                       <p className="text-muted-foreground text-sm">Email</p>
-                      <p>{profileData.email}</p>
+                      <p>{profile?.email || user?.email || 'Not provided'}</p>
                     </div>
                   </div>
                   
@@ -118,7 +183,7 @@ const Profile = () => {
                     <Phone className="h-5 w-5 mr-3 text-muted-foreground mt-0.5" />
                     <div>
                       <p className="text-muted-foreground text-sm">Phone</p>
-                      <p>{profileData.phone}</p>
+                      <p>{profile?.phone || 'Not provided'}</p>
                     </div>
                   </div>
                   
@@ -126,7 +191,7 @@ const Profile = () => {
                     <School className="h-5 w-5 mr-3 text-muted-foreground mt-0.5" />
                     <div>
                       <p className="text-muted-foreground text-sm">School</p>
-                      <p>{profileData.school}</p>
+                      <p>{profile?.school || 'Not provided'}</p>
                     </div>
                   </div>
                   
@@ -134,7 +199,7 @@ const Profile = () => {
                     <MapPin className="h-5 w-5 mr-3 text-muted-foreground mt-0.5" />
                     <div>
                       <p className="text-muted-foreground text-sm">Location</p>
-                      <p>{profileData.address}</p>
+                      <p>{profile?.address || 'Not provided'}</p>
                     </div>
                   </div>
                 </div>
@@ -149,8 +214,14 @@ const Profile = () => {
                   variant="outline" 
                   size="sm" 
                   onClick={isEditing ? handleSaveProfile : () => setIsEditing(true)}
+                  disabled={updateProfileMutation.isPending}
                 >
-                  {isEditing ? (
+                  {updateProfileMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      Saving...
+                    </>
+                  ) : isEditing ? (
                     <>
                       <Save className="h-4 w-4 mr-1" />
                       Save
@@ -169,11 +240,13 @@ const Profile = () => {
                     <label className="text-sm font-medium">Full Name</label>
                     {isEditing ? (
                       <Input 
-                        value={profileData.name} 
-                        onChange={(e) => setProfileData({...profileData, name: e.target.value})}
+                        name="name"
+                        value={profileForm.name} 
+                        onChange={handleInputChange}
+                        placeholder="Your full name"
                       />
                     ) : (
-                      <p>{profileData.name}</p>
+                      <p>{profile?.name || 'Not provided'}</p>
                     )}
                   </div>
                   
@@ -182,11 +255,13 @@ const Profile = () => {
                       <label className="text-sm font-medium">Email</label>
                       {isEditing ? (
                         <Input 
-                          value={profileData.email} 
-                          onChange={(e) => setProfileData({...profileData, email: e.target.value})}
+                          name="email"
+                          value={profileForm.email} 
+                          onChange={handleInputChange}
+                          placeholder="Your email address"
                         />
                       ) : (
-                        <p>{profileData.email}</p>
+                        <p>{profile?.email || user?.email || 'Not provided'}</p>
                       )}
                     </div>
                     
@@ -194,11 +269,13 @@ const Profile = () => {
                       <label className="text-sm font-medium">Phone</label>
                       {isEditing ? (
                         <Input 
-                          value={profileData.phone} 
-                          onChange={(e) => setProfileData({...profileData, phone: e.target.value})}
+                          name="phone"
+                          value={profileForm.phone} 
+                          onChange={handleInputChange}
+                          placeholder="Your phone number"
                         />
                       ) : (
-                        <p>{profileData.phone}</p>
+                        <p>{profile?.phone || 'Not provided'}</p>
                       )}
                     </div>
                   </div>
@@ -208,11 +285,13 @@ const Profile = () => {
                       <label className="text-sm font-medium">School</label>
                       {isEditing ? (
                         <Input 
-                          value={profileData.school} 
-                          onChange={(e) => setProfileData({...profileData, school: e.target.value})}
+                          name="school"
+                          value={profileForm.school} 
+                          onChange={handleInputChange}
+                          placeholder="Your school name"
                         />
                       ) : (
-                        <p>{profileData.school}</p>
+                        <p>{profile?.school || 'Not provided'}</p>
                       )}
                     </div>
                     
@@ -220,11 +299,13 @@ const Profile = () => {
                       <label className="text-sm font-medium">Grade</label>
                       {isEditing ? (
                         <Input 
-                          value={profileData.grade} 
-                          onChange={(e) => setProfileData({...profileData, grade: e.target.value})}
+                          name="grade"
+                          value={profileForm.grade} 
+                          onChange={handleInputChange}
+                          placeholder="Your current grade"
                         />
                       ) : (
-                        <p>{profileData.grade}</p>
+                        <p>{profile?.grade || 'Not provided'}</p>
                       )}
                     </div>
                   </div>
@@ -233,11 +314,13 @@ const Profile = () => {
                     <label className="text-sm font-medium">Address</label>
                     {isEditing ? (
                       <Input 
-                        value={profileData.address} 
-                        onChange={(e) => setProfileData({...profileData, address: e.target.value})}
+                        name="address"
+                        value={profileForm.address} 
+                        onChange={handleInputChange}
+                        placeholder="Your address"
                       />
                     ) : (
-                      <p>{profileData.address}</p>
+                      <p>{profile?.address || 'Not provided'}</p>
                     )}
                   </div>
                   
@@ -246,11 +329,13 @@ const Profile = () => {
                     {isEditing ? (
                       <textarea 
                         className="w-full min-h-[100px] p-2 border rounded-md"
-                        value={profileData.bio} 
-                        onChange={(e) => setProfileData({...profileData, bio: e.target.value})}
+                        name="bio"
+                        value={profileForm.bio} 
+                        onChange={handleInputChange}
+                        placeholder="Write something about yourself"
                       />
                     ) : (
-                      <p>{profileData.bio}</p>
+                      <p>{profile?.bio || 'No bio provided'}</p>
                     )}
                   </div>
                 </div>
@@ -266,24 +351,44 @@ const Profile = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
-                {enrolledCourses.map(course => (
-                  <div key={course.id} className="bg-slate-50 p-4 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold flex items-center">
-                        <BookOpen className="h-5 w-5 mr-2 text-brightmind-blue" />
-                        {course.title}
-                      </h3>
-                      <Button variant="ghost" size="sm" className="text-brightmind-blue">View Course</Button>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-sm">
-                        <span>Progress</span>
-                        <span>{course.progress}%</span>
+                {isLoadingCourses ? (
+                  renderCourseSkeletons()
+                ) : enrolledCourses && enrolledCourses.length > 0 ? (
+                  enrolledCourses.map((enrollment: any) => (
+                    <div key={enrollment.id} className="bg-slate-50 p-4 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-semibold flex items-center">
+                          <BookOpen className="h-5 w-5 mr-2 text-brightmind-blue" />
+                          {enrollment.course.title}
+                        </h3>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-brightmind-blue"
+                          onClick={() => window.location.href = `/courses/${enrollment.course.id}`}
+                        >
+                          View Course
+                        </Button>
                       </div>
-                      <Progress value={course.progress} className="h-2" />
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <span>Progress</span>
+                          <span>{enrollment.progress || 0}%</span>
+                        </div>
+                        <Progress value={enrollment.progress || 0} className="h-2" />
+                      </div>
                     </div>
+                  ))
+                ) : (
+                  <div className="text-center p-6 bg-muted/40 rounded-lg">
+                    <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-medium mb-2">No courses yet</h3>
+                    <p className="text-muted-foreground mb-4">
+                      You haven't enrolled in any courses yet.
+                    </p>
+                    <Button onClick={() => window.location.href = '/courses'}>Browse Courses</Button>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
           </Card>

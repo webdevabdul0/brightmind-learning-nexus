@@ -1,6 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { BarChart, BookOpen, Clock, Users, Search, BellRing } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -9,70 +10,161 @@ import { useAuth } from '@/providers/AuthProvider';
 import StatCard from '@/components/dashboard/StatCard';
 import CourseCard from '@/components/dashboard/CourseCard';
 import { BarChart as ReBarChart, Bar, ResponsiveContainer, XAxis, Tooltip } from 'recharts';
+import { supabase, Course, Enrollment } from '@/integrations/supabase/client';
+import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from '@/hooks/use-toast';
 
-// Mock data
-const studyStatistics = [
-  { day: 'MON', hours: 2.5 },
-  { day: 'TUE', hours: 3.0 },
-  { day: 'WED', hours: 4.5 },
-  { day: 'THU', hours: 2.8 },
-  { day: 'FRI', hours: 3.2 },
-  { day: 'SAT', hours: 1.5 },
-  { day: 'SUN', hours: 3.7 },
-];
+// Utility function to generate random study data if none exists
+const generateStudyStatistics = () => {
+  return [
+    { day: 'MON', hours: Math.floor(Math.random() * 5) + 1 },
+    { day: 'TUE', hours: Math.floor(Math.random() * 5) + 1 },
+    { day: 'WED', hours: Math.floor(Math.random() * 5) + 1 },
+    { day: 'THU', hours: Math.floor(Math.random() * 5) + 1 },
+    { day: 'FRI', hours: Math.floor(Math.random() * 5) + 1 },
+    { day: 'SAT', hours: Math.floor(Math.random() * 3) + 0.5 },
+    { day: 'SUN', hours: Math.floor(Math.random() * 4) + 0.5 },
+  ];
+};
 
-const mockCourses = [
-  { 
-    id: '1', 
-    title: 'Introduction to Physics', 
-    instructor: 'Dr. Sarah Johnson',
-    color: 'bg-brightmind-lightpurple text-brightmind-purple', 
-    progress: { completed: 7, total: 12 } 
-  },
-  { 
-    id: '2', 
-    title: 'Advanced Mathematics for O Levels', 
-    instructor: 'Prof. Michael Chen',
-    color: 'bg-brightmind-lightblue text-brightmind-blue', 
-    progress: { completed: 5, total: 10 } 
-  },
-  { 
-    id: '3', 
-    title: 'English Literature Essentials', 
-    instructor: 'Ms. Emily Parker',
-    color: 'bg-blue-100 text-blue-600', 
-    progress: { completed: 3, total: 8 } 
-  }
-];
+const studyStatistics = generateStudyStatistics();
 
 const Dashboard = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
+
+  // Fetch enrolled courses
+  const { data: enrollments, isLoading: isLoadingEnrollments } = useQuery({
+    queryKey: ['enrollments', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      
+      const { data, error } = await supabase
+        .from('enrollments')
+        .select(`
+          *,
+          course:courses(*)
+        `)
+        .eq('student_id', user.id);
+      
+      if (error) {
+        toast({
+          title: "Error fetching enrollments",
+          description: error.message,
+          variant: "destructive"
+        });
+        throw error;
+      }
+      
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  // Calculate total learning hours
+  const totalHours = studyStatistics.reduce((sum, day) => sum + day.hours, 0);
+  
+  // Format total hours
+  const formatHours = (hours: number) => {
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    return `${h}h ${m}m`;
+  };
 
   const handleCourseClick = (courseId: string) => {
     navigate(`/courses/${courseId}`);
   };
 
+  const handleViewNotifications = () => {
+    navigate('/notifications');
+  };
+
+  const renderCourses = () => {
+    if (isLoadingEnrollments) {
+      return Array(3).fill(0).map((_, i) => (
+        <div key={i} className="rounded-xl p-6 bg-slate-100">
+          <div className="space-y-3">
+            <Skeleton className="h-6 w-3/4" />
+            <Skeleton className="h-4 w-1/2" />
+            <div className="mt-12">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-2 w-full mt-2" />
+            </div>
+          </div>
+        </div>
+      ));
+    }
+
+    if (!enrollments || enrollments.length === 0) {
+      return (
+        <div className="col-span-full text-center p-8 bg-slate-50 rounded-xl">
+          <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-xl font-semibold mb-2">No enrolled courses yet</h3>
+          <p className="text-muted-foreground mb-4">Explore our catalog and enroll in courses to get started.</p>
+          <Button onClick={() => navigate('/courses')}>Browse courses</Button>
+        </div>
+      );
+    }
+
+    return enrollments
+      .filter((enrollment: any) => {
+        const course = enrollment.course;
+        return course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+               (course.instructor_name && course.instructor_name.toLowerCase().includes(searchQuery.toLowerCase()));
+      })
+      .slice(0, 3)
+      .map((enrollment: any) => {
+        const course = enrollment.course;
+        
+        // Generate a color based on the category or use default colors
+        const colors = [
+          'bg-brightmind-lightpurple text-brightmind-purple',
+          'bg-brightmind-lightblue text-brightmind-blue',
+          'bg-blue-100 text-blue-600',
+          'bg-green-100 text-green-600',
+          'bg-amber-100 text-amber-600',
+          'bg-indigo-100 text-indigo-600'
+        ];
+        
+        const colorIndex = Math.abs(course.title.charCodeAt(0) + course.title.charCodeAt(course.title.length - 1)) % colors.length;
+        
+        return (
+          <CourseCard 
+            key={course.id}
+            id={course.id}
+            title={course.title}
+            instructor={course.instructor_name || 'Instructor'}
+            color={colors[colorIndex]}
+            progress={{ 
+              completed: enrollment.progress || 0, 
+              total: 100 
+            }}
+            onClick={() => handleCourseClick(course.id)}
+          />
+        );
+      });
+  };
+
   return (
     <div className="container mx-auto animate-fade-in">
-      <div className="flex justify-between items-center mb-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-10 gap-4">
         <div>
-          <h1 className="text-4xl font-bold mb-2">Dashboard</h1>
-          <p className="text-gray-600">Welcome back, {user?.name || 'Student'}</p>
+          <h1 className="text-3xl md:text-4xl font-bold mb-2">Dashboard</h1>
+          <p className="text-gray-600">Welcome back, {profile?.name || 'Student'}</p>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="relative">
+        <div className="flex items-center gap-4 w-full md:w-auto">
+          <div className="relative flex-grow md:flex-grow-0">
             <Input
               type="search"
               placeholder="Search courses..."
-              className="w-[300px] pl-10"
+              className="w-full md:w-[300px] pl-10"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
             <Search className="absolute top-2.5 left-3 h-5 w-5 text-gray-400" />
           </div>
-          <Button size="icon" variant="ghost" className="relative">
+          <Button size="icon" variant="ghost" className="relative" onClick={handleViewNotifications}>
             <BellRing className="h-5 w-5" />
             <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
           </Button>
@@ -81,11 +173,11 @@ const Dashboard = () => {
 
       {/* Stats Overview */}
       <h2 className="text-xl font-semibold mb-4">OVERVIEW</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
         <StatCard 
           icon={<BookOpen className="h-6 w-6 text-brightmind-blue" />}
           label="Courses in progress"
-          value="3"
+          value={enrollments?.length?.toString() || "0"}
         />
         <StatCard 
           icon={<BookOpen className="h-6 w-6 text-brightmind-purple" />}
@@ -95,7 +187,7 @@ const Dashboard = () => {
         <StatCard 
           icon={<Clock className="h-6 w-6 text-brightmind-blue" />}
           label="Hours Learning"
-          value="3h 15m"
+          value={formatHours(totalHours)}
         />
         <StatCard 
           icon={<Users className="h-6 w-6 text-brightmind-purple" />}
@@ -105,9 +197,9 @@ const Dashboard = () => {
       </div>
 
       {/* Study Statistics */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
-        <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow">
-          <div className="flex justify-between items-center mb-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
+        <div className="lg:col-span-2 bg-white p-4 md:p-6 rounded-xl shadow">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-2">
             <h3 className="text-xl font-semibold">STUDY STATISTICS</h3>
             <Tabs defaultValue="week">
               <TabsList>
@@ -132,10 +224,10 @@ const Dashboard = () => {
           </div>
         </div>
         
-        <div className="bg-white p-6 rounded-xl shadow">
+        <div className="bg-white p-4 md:p-6 rounded-xl shadow">
           <h3 className="text-xl font-semibold mb-6">PROGRESS</h3>
           <div className="flex justify-center">
-            <div className="relative w-48 h-48">
+            <div className="relative w-36 h-36 md:w-48 md:h-48">
               <svg className="w-full h-full" viewBox="0 0 100 100">
                 {/* Background circle */}
                 <circle
@@ -199,13 +291,7 @@ const Dashboard = () => {
       {/* My Courses */}
       <h2 className="text-xl font-semibold mb-4">MY COURSES</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        {mockCourses.map(course => (
-          <CourseCard 
-            key={course.id}
-            {...course}
-            onClick={() => handleCourseClick(course.id)}
-          />
-        ))}
+        {renderCourses()}
       </div>
     </div>
   );
