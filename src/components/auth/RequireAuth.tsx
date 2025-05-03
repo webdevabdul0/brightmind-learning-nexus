@@ -9,7 +9,7 @@ interface RequireAuthProps {
 }
 
 const RequireAuth = ({ children, allowedRoles }: RequireAuthProps) => {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -25,7 +25,7 @@ const RequireAuth = ({ children, allowedRoles }: RequireAuthProps) => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  if (allowedRoles && profile?.role && !allowedRoles.includes(profile.role as 'student' | 'teacher' | 'admin')) {
     // User doesn't have permission - redirect to unauthorized page or dashboard
     return <Navigate to="/unauthorized" replace />;
   }

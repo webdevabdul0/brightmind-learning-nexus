@@ -11,6 +11,7 @@ import SidebarLayout from "@/components/layout/SidebarLayout";
 import Login from "@/pages/auth/Login";
 import Signup from "@/pages/auth/Signup";
 import ResetPassword from "@/pages/auth/ResetPassword";
+import ResetPasswordUpdate from "@/pages/auth/ResetPasswordUpdate";
 
 // Protected pages
 import Dashboard from "@/pages/Dashboard";
@@ -43,6 +44,7 @@ const App = () => (
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/reset-password-update" element={<ResetPasswordUpdate />} />
           
           {/* Protected routes */}
           <Route path="/" element={

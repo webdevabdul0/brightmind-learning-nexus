@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, Profile } from '@/integrations/supabase/client';
@@ -12,6 +11,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   loading: boolean;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
 }
@@ -165,6 +165,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Add resetPassword function
+  const resetPassword = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password-update`,
+      });
+      
+      if (error) {
+        toast({
+          title: "Reset password failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        throw error;
+      }
+      
+      toast({
+        title: "Reset password email sent",
+        description: "Please check your email for the reset link",
+      });
+    } catch (error) {
+      console.error('Reset password error:', error);
+      throw error;
+    }
+  };
+
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user) {
       throw new Error('No user logged in');
@@ -205,7 +231,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       session, 
       login, 
       signup, 
-      logout, 
+      logout,
+      resetPassword,
       loading,
       updateProfile 
     }}>
