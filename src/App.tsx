@@ -8,143 +8,144 @@ import { AuthProvider } from "@/providers/AuthProvider";
 // Layout
 import SidebarLayout from "@/components/layout/SidebarLayout";
 
-// Pages
-import Dashboard from "@/pages/Dashboard";
-import CourseList from "@/pages/courses/CourseList";
-import CreateCourse from "@/pages/courses/CreateCourse";
-import CourseDetail from "@/pages/courses/CourseDetail";
-import LiveClasses from "@/pages/live/LiveClasses";
-import LiveSession from "@/pages/live/LiveSession";
-import AssignmentList from "@/pages/assignments/AssignmentList";
-import AISuggestions from "@/pages/ai/AISuggestions";
-import Profile from "@/pages/profile/Profile";
-import Performance from "@/pages/performance/Performance";
-import Settings from "@/pages/settings/Settings";
-import Notifications from "@/pages/notifications/Notifications";
-import NotFound from "@/pages/NotFound";
-import Unauthorized from "@/pages/Unauthorized";
-
 // Auth pages
 import Login from "@/pages/auth/Login";
 import Signup from "@/pages/auth/Signup";
 import ResetPassword from "@/pages/auth/ResetPassword";
 import ResetPasswordUpdate from "@/pages/auth/ResetPasswordUpdate";
 
-// Components
-import RequireAuth from "@/components/auth/RequireAuth";
+// Protected pages
+import Dashboard from "@/pages/Dashboard";
+import CourseList from "@/pages/courses/CourseList";
+import CourseDetail from "@/pages/courses/CourseDetail";
+import LiveClasses from "@/pages/live/LiveClasses";
+import LiveSession from "@/pages/live/LiveSession";
+import AISuggestions from "@/pages/ai/AISuggestions";
+import AssignmentList from "@/pages/assignments/AssignmentList";
+import Profile from "@/pages/profile/Profile";
+import Notifications from "@/pages/notifications/Notifications";
+import Performance from "@/pages/performance/Performance";
+import Settings from "@/pages/settings/Settings";
 
-// Create a client for React Query
+// Other pages
+import NotFound from "@/pages/NotFound";
+import RequireAuth from "@/components/auth/RequireAuth";
+import Unauthorized from "@/pages/Unauthorized";
+
 const queryClient = new QueryClient();
 
-function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
-            {/* Auth routes - not protected */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/reset-password-update" element={<ResetPasswordUpdate />} />
-            
-            {/* Redirect from index page to root */}
-            <Route path="/index" element={<Navigate to="/" replace />} />
-            
-            {/* Protected routes */}
-            <Route path="/" element={
-              <RequireAuth>
-                <Dashboard />
-              </RequireAuth>
-            } />
-
-            {/* Course routes */}
-            <Route path="/courses" element={
-              <RequireAuth>
-                <CourseList />
-              </RequireAuth>
-            } />
-            <Route path="/courses/create" element={
-              <RequireAuth allowedRoles={['teacher', 'admin']}>
-                <CreateCourse />
-              </RequireAuth>
-            } />
-            <Route path="/courses/:id" element={
-              <RequireAuth>
-                <CourseDetail />
-              </RequireAuth>
-            } />
-            <Route path="/courses/:id/edit" element={
-              <RequireAuth allowedRoles={['teacher', 'admin']}>
-                <CreateCourse />
-              </RequireAuth>
-            } />
-
-            {/* Live classes */}
-            <Route path="/live-classes" element={
-              <RequireAuth>
-                <LiveClasses />
-              </RequireAuth>
-            } />
-            <Route path="/live-classes/:id" element={
-              <RequireAuth>
-                <LiveSession />
-              </RequireAuth>
-            } />
-
-            {/* Assignments */}
-            <Route path="/assignments" element={
-              <RequireAuth>
-                <AssignmentList />
-              </RequireAuth>
-            } />
-
-            {/* AI Suggestions */}
-            <Route path="/ai-suggestions" element={
-              <RequireAuth>
-                <AISuggestions />
-              </RequireAuth>
-            } />
-
-            {/* Profile */}
-            <Route path="/profile" element={
-              <RequireAuth>
-                <Profile />
-              </RequireAuth>
-            } />
-
-            {/* Performance */}
-            <Route path="/performance" element={
-              <RequireAuth>
-                <Performance />
-              </RequireAuth>
-            } />
-
-            {/* Settings */}
-            <Route path="/settings" element={
-              <RequireAuth>
-                <Settings />
-              </RequireAuth>
-            } />
-
-            {/* Notifications */}
-            <Route path="/notifications" element={
-              <RequireAuth>
-                <Notifications />
-              </RequireAuth>
-            } />
-
-            {/* Error pages */}
-            <Route path="/unauthorized" element={<Unauthorized />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <BrowserRouter>
+      <AuthProvider>
+        <Toaster />
+        <Sonner />
+        <Routes>
+          {/* Auth routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/reset-password-update" element={<ResetPasswordUpdate />} />
           
-          <Toaster />
-          <Sonner />
-        </AuthProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
-  );
-}
+          {/* Redirect from index page to root */}
+          <Route path="/index" element={<Navigate to="/" replace />} />
+          
+          {/* Protected routes */}
+          <Route path="/" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <Dashboard />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          <Route path="/courses" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <CourseList />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          <Route path="/courses/:courseId" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <CourseDetail />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          <Route path="/assignments" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <AssignmentList />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          <Route path="/live-classes" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <LiveClasses />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          <Route path="/live-classes/:sessionId" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <LiveSession />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          <Route path="/profile" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <Profile />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          <Route path="/notifications" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <Notifications />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          <Route path="/performance" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <Performance />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          <Route path="/settings" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <Settings />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          <Route path="/ai-suggestions" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <AISuggestions />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          {/* Additional routes */}
+          <Route path="/unauthorized" element={<Unauthorized />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  </QueryClientProvider>
+);
 
 export default App;
