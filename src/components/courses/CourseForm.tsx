@@ -86,9 +86,7 @@ const CourseForm = ({ existingCourse, onSuccess }: CourseFormProps) => {
     try {
       const courseData = {
         ...data,
-        instructor_id: user.id,
-        title: data.title, // Ensure title is explicitly assigned
-        category: data.category, // Ensure category is explicitly assigned
+        instructor_id: user.id
       };
       
       let result;

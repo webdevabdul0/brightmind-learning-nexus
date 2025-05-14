@@ -65,8 +65,7 @@ const AssignmentForm = ({ courseId, existingAssignment, onSuccess }: AssignmentF
     try {
       const assignmentData = {
         ...data,
-        course_id: courseId,
-        title: data.title, // Ensure title is explicitly assigned
+        course_id: courseId
       };
       
       let result;
