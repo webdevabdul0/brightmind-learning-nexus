@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -12,15 +11,18 @@ import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/components/ui/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, sendNotifications } from '@/integrations/supabase/client';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface AssignmentCardProps {
   assignment: any;
   onClick: () => void;
   onUpload: (e: React.MouseEvent, assignmentId: string) => void;
+  profile?: any;
+  handleViewDetails?: (assignmentId: string) => void;
 }
 
-const AssignmentCard = ({ assignment, onClick, onUpload }: AssignmentCardProps) => {
+const AssignmentCard = ({ assignment, onClick, onUpload, profile, handleViewDetails }: AssignmentCardProps) => {
   const { toast } = useToast();
   
   const getStatusColor = (status: string) => {
@@ -74,7 +76,7 @@ const AssignmentCard = ({ assignment, onClick, onUpload }: AssignmentCardProps) 
       </CardContent>
       <CardFooter>
         <div className="flex justify-between w-full">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={() => profile?.role === 'teacher' && handleViewDetails ? handleViewDetails(assignment.id) : onClick()}>
             <FileText className="h-4 w-4 mr-1" />
             View Details
           </Button>
@@ -94,26 +96,39 @@ const AssignmentCard = ({ assignment, onClick, onUpload }: AssignmentCardProps) 
 };
 
 const AssignmentList = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const navigate = useNavigate();
   const { toast } = useToast();
   
-  // Fetch assignments
+  // Fetch user enrollments
+  const { data: enrollments = [] } = useQuery({
+    queryKey: ['userEnrollments', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('enrollments')
+        .select('course_id')
+        .eq('student_id', user.id);
+      if (error) throw error;
+      console.log('Fetched enrollments in AssignmentList:', data);
+      return data || [];
+    },
+    enabled: !!user
+  });
+  const enrolledCourseIds = enrollments.map((e: any) => e.course_id);
+
+  // Fetch assignments for enrolled courses
   const { data: assignments = [], isLoading } = useQuery({
     queryKey: ['assignments', user?.id],
     queryFn: async () => {
-      if (!user) return [];
-      
+      if (!user || enrolledCourseIds.length === 0) return [];
       const { data, error } = await supabase
         .from('assignments')
-        .select(`
-          *,
-          course:courses(id, title)
-        `)
+        .select(`*, course:courses(id, title)`)
+        .in('course_id', enrolledCourseIds)
         .order('due_date');
-        
       if (error) {
         toast({
           title: "Error fetching assignments",
@@ -122,7 +137,7 @@ const AssignmentList = () => {
         });
         throw error;
       }
-      
+      console.log('Fetched assignments for enrolled courses:', data);
       // Fetch submission status for each assignment
       const assignmentsWithStatus = await Promise.all(
         data.map(async (assignment) => {
@@ -132,16 +147,13 @@ const AssignmentList = () => {
             .eq('assignment_id', assignment.id)
             .eq('student_id', user.id)
             .single();
-          
           let status = 'pending';
           let progress = 0;
-          
           if (submission) {
             status = submission.status;
             progress = status === 'completed' ? 100 : 
                       status === 'in-progress' ? 65 : 0;
           }
-          
           return {
             ...assignment,
             status,
@@ -149,10 +161,9 @@ const AssignmentList = () => {
           };
         })
       );
-      
       return assignmentsWithStatus;
     },
-    enabled: !!user
+    enabled: !!user && enrolledCourseIds.length > 0
   });
 
   const filteredAssignments = assignments.filter(assignment => {
@@ -166,12 +177,64 @@ const AssignmentList = () => {
     navigate(`/assignments/${assignmentId}`);
   };
 
-  const handleUpload = (e: React.MouseEvent, assignmentId: string) => {
+  const handleUpload = async (e: React.MouseEvent, assignmentId: string) => {
     e.stopPropagation();
-    toast({
-      title: "Upload started",
-      description: "Your assignment is being uploaded.",
-    });
+    // Open file dialog for PDF
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/pdf';
+    input.onchange = async (event: any) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      if (file.type !== 'application/pdf') {
+        toast({ title: 'Invalid file', description: 'Please upload a PDF file.', variant: 'destructive' });
+        return;
+      }
+      toast({ title: 'Uploading...', description: 'Your assignment is being uploaded.' });
+      // Upload to Supabase Storage
+      const filePath = `student-${user.id}/assignment-${assignmentId}-${Date.now()}.pdf`;
+      console.log('Uploading to bucket:', 'assignments', 'filePath:', filePath, 'file:', file);
+      const { data: uploadData, error: uploadError } = await supabase.storage.from('assignments').upload(filePath, file);
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        toast({ title: 'Upload failed', description: uploadError.message, variant: 'destructive' });
+        return;
+      }
+      // Get public URL (or use signed URL if private)
+      const { data: urlData } = supabase.storage.from('assignments').getPublicUrl(filePath);
+      const fileUrl = urlData?.publicUrl || '';
+      // Insert submission record
+      const { error: subError } = await supabase.from('assignment_submissions').upsert({
+        assignment_id: assignmentId,
+        student_id: user.id,
+        file_url: fileUrl,
+        submitted_at: new Date().toISOString(),
+        status: 'completed'
+      });
+      if (subError) {
+        toast({ title: 'Submission failed', description: subError.message, variant: 'destructive' });
+        return;
+      }
+      toast({ title: 'Assignment submitted', description: 'Your PDF has been uploaded.' });
+      // Notify the course teacher
+      // Get assignment and course info
+      const { data: assignment } = await supabase.from('assignments').select('title, course_id').eq('id', assignmentId).single();
+      if (assignment) {
+        const { data: course } = await supabase.from('courses').select('instructor_id, title').eq('id', assignment.course_id).single();
+        if (course && course.instructor_id) {
+          await sendNotifications([
+            course.instructor_id
+          ],
+          'Assignment Submitted',
+          `A student has submitted the assignment "${assignment.title}" for your course "${course.title}".
+`,
+          'submission',
+          `/assignments/${assignmentId}`
+          );
+        }
+      }
+    };
+    input.click();
   };
 
   const pendingCount = assignments.filter(a => a.status === 'pending').length;
@@ -195,6 +258,50 @@ const AssignmentList = () => {
         </div>
       </div>
     ));
+  };
+
+  const [viewSubmissionsDialogOpen, setViewSubmissionsDialogOpen] = useState(false);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [grading, setGrading] = useState<{ [submissionId: string]: boolean }>({});
+  const [grades, setGrades] = useState<{ [submissionId: string]: string }>({});
+
+  const fetchSubmissions = async (assignmentId: string) => {
+    const { data, error } = await supabase
+      .from('assignment_submissions')
+      .select('id, student_id, file_url, grade, status, submitted_at, student:student_id(name, email)')
+      .eq('assignment_id', assignmentId);
+    if (!error) setSubmissions(data || []);
+  };
+
+  const handleViewDetails = async (assignmentId: string) => {
+    setSelectedAssignmentId(assignmentId);
+    setViewSubmissionsDialogOpen(true);
+    await fetchSubmissions(assignmentId);
+  };
+
+  const handleGrade = async (submissionId: string, studentId: string) => {
+    setGrading(g => ({ ...g, [submissionId]: true }));
+    const grade = Number(grades[submissionId]);
+    const { error } = await supabase
+      .from('assignment_submissions')
+      .update({ grade, status: 'graded' })
+      .eq('id', submissionId);
+    setGrading(g => ({ ...g, [submissionId]: false }));
+    if (!error) {
+      toast({ title: 'Graded', description: 'Grade submitted.' });
+      // Notify student
+      await sendNotifications([
+        studentId
+      ],
+      'Assignment Graded',
+      `Your assignment has been graded. Grade: ${grade}`,
+      'grade',
+      '/assignments');
+      await fetchSubmissions(selectedAssignmentId!);
+    } else {
+      toast({ title: 'Failed to grade', description: error.message, variant: 'destructive' });
+    }
   };
 
   return (
@@ -285,6 +392,8 @@ const AssignmentList = () => {
                   assignment={assignment}
                   onClick={() => handleAssignmentClick(assignment.id)}
                   onUpload={handleUpload}
+                  profile={profile}
+                  handleViewDetails={handleViewDetails}
                 />
               ))}
             </div>
@@ -315,6 +424,8 @@ const AssignmentList = () => {
                   assignment={assignment}
                   onClick={() => handleAssignmentClick(assignment.id)}
                   onUpload={handleUpload}
+                  profile={profile}
+                  handleViewDetails={handleViewDetails}
                 />
               ))}
             </div>
@@ -344,6 +455,8 @@ const AssignmentList = () => {
                   assignment={assignment}
                   onClick={() => handleAssignmentClick(assignment.id)}
                   onUpload={handleUpload}
+                  profile={profile}
+                  handleViewDetails={handleViewDetails}
                 />
               ))}
             </div>
@@ -373,6 +486,8 @@ const AssignmentList = () => {
                   assignment={assignment}
                   onClick={() => handleAssignmentClick(assignment.id)}
                   onUpload={handleUpload}
+                  profile={profile}
+                  handleViewDetails={handleViewDetails}
                 />
               ))}
             </div>
@@ -389,6 +504,38 @@ const AssignmentList = () => {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Submissions Dialog for Teachers */}
+      <Dialog open={viewSubmissionsDialogOpen} onOpenChange={setViewSubmissionsDialogOpen}>
+        <DialogContent className="max-w-2xl w-[90vw]">
+          <DialogHeader><DialogTitle>Assignment Submissions</DialogTitle></DialogHeader>
+          {submissions.length === 0 ? (
+            <div>No submissions yet.</div>
+          ) : (
+            <ul className="space-y-4">
+              {submissions.map(sub => (
+                <li key={sub.id} className="flex items-center gap-4 border-b pb-2">
+                  <div className="flex-1">
+                    <div className="font-medium">{sub.student?.name || sub.student_id}</div>
+                    <div className="text-xs text-muted-foreground">{sub.student?.email}</div>
+                    <a href={sub.file_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-sm">Download PDF</a>
+                    <div className="text-xs mt-1">Submitted: {new Date(sub.submitted_at).toLocaleString()}</div>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Grade"
+                    className="border rounded px-2 py-1 w-20"
+                    value={grades[sub.id] || sub.grade || ''}
+                    onChange={e => setGrades(g => ({ ...g, [sub.id]: e.target.value }))}
+                    disabled={grading[sub.id]}
+                  />
+                  <Button size="sm" onClick={() => handleGrade(sub.id, sub.student_id)} disabled={grading[sub.id]}>Mark as Graded</Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

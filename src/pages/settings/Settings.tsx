@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
@@ -19,6 +18,11 @@ const Settings = () => {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // Only allow the user to view/edit their settings
+  if (!user || user.id !== profile?.id) {
+    return <div className="p-8 text-center text-red-600 font-bold">Unauthorized</div>;
+  }
   
   // Fetch user settings
   const { data: userSettings, isLoading: isLoadingSettings } = useQuery({

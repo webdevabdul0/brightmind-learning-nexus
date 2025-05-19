@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -14,7 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/hooks/use-toast';
 
 const CourseList = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const navigate = useNavigate();
@@ -110,7 +109,7 @@ const CourseList = () => {
   const enrolledCourseIds = enrollments.map((enrollment: any) => enrollment.course_id);
 
   // Filter enrolled courses
-  const filteredEnrolledCourses = courses.filter(course => 
+  const enrolledCourses = courses.filter(course => 
     enrolledCourseIds.includes(course.id) &&
     (course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (course.instructor?.name && course.instructor.name.toLowerCase().includes(searchQuery.toLowerCase()))) &&
@@ -201,20 +200,11 @@ const CourseList = () => {
             total: 100 
           }}
           onClick={() => handleCourseClick(course.id)}
+          isEnrolled={isEnrolled}
+          isLoadingEnrollments={isLoadingEnrollments}
+          userRole={profile?.role}
+          onEnroll={enrollInCourse}
         />
-        {!isEnrolled && (
-          <div className="absolute bottom-4 right-4">
-            <Button 
-              size="sm" 
-              onClick={(e) => {
-                e.stopPropagation();
-                enrollInCourse(course.id);
-              }}
-            >
-              Enroll
-            </Button>
-          </div>
-        )}
       </div>
     );
   };
@@ -292,9 +282,9 @@ const CourseList = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {renderSkeletons(3)}
             </div>
-          ) : filteredEnrolledCourses.length > 0 ? (
+          ) : enrolledCourses.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredEnrolledCourses.map(course => generateCourseCard(course))}
+              {enrolledCourses.map(course => generateCourseCard(course))}
             </div>
           ) : (
             <div className="bg-muted/40 rounded-lg p-8 text-center">

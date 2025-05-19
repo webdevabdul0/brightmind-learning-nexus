@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, Check, Loader2, RefreshCw, Trash } from 'lucide-react';
@@ -13,6 +12,9 @@ import { toast } from '@/hooks/use-toast';
 
 const Notifications = () => {
   const { user } = useAuth();
+  if (!user) {
+    return <div className="p-8 text-center text-red-600 font-bold">Unauthorized</div>;
+  }
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('all');
   

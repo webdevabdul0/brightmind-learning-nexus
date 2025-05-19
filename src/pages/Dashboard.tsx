@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -34,6 +33,49 @@ const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
 
+  // Teacher-specific queries
+  const { data: teacherCourses = [], isLoading: isLoadingTeacherCourses } = useQuery({
+    queryKey: ['teacherCourses', user?.id],
+    queryFn: async () => {
+      if (!user || profile?.role !== 'teacher') return [];
+      const { data, error } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('instructor_id', user.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user && profile?.role === 'teacher',
+  });
+
+  const { data: teacherAssignments = [], isLoading: isLoadingTeacherAssignments } = useQuery({
+    queryKey: ['teacherAssignments', user?.id],
+    queryFn: async () => {
+      if (!user || profile?.role !== 'teacher') return [];
+      const { data, error } = await supabase
+        .from('assignments')
+        .select('*')
+        .in('course_id', teacherCourses.map((c: any) => c.id));
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user && profile?.role === 'teacher' && teacherCourses.length > 0,
+  });
+
+  const { data: teacherLiveClasses = [], isLoading: isLoadingTeacherLiveClasses } = useQuery({
+    queryKey: ['teacherLiveClasses', user?.id],
+    queryFn: async () => {
+      if (!user || profile?.role !== 'teacher') return [];
+      const { data, error } = await supabase
+        .from('live_classes')
+        .select('*')
+        .eq('instructor_id', user.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user && profile?.role === 'teacher',
+  });
+
   // Fetch enrolled courses
   const { data: enrollments, isLoading: isLoadingEnrollments } = useQuery({
     queryKey: ['enrollments', user?.id],
@@ -58,6 +100,48 @@ const Dashboard = () => {
       }
       
       return data || [];
+    },
+    enabled: !!user,
+  });
+
+  // Add this query to fetch completed lessons for the student
+  const { data: completedLessonsCount = 0 } = useQuery({
+    queryKey: ['completedLessons', user?.id],
+    queryFn: async () => {
+      if (!user) return 0;
+      const { data, error } = await supabase
+        .from('lesson_progress')
+        .select('id', { count: 'exact' })
+        .eq('student_id', user.id)
+        .eq('completed', true);
+      if (error) return 0;
+      return data.length;
+    },
+    enabled: !!user,
+  });
+
+  // Add this query to fetch total learning minutes from completed lessons
+  const { data: totalLearningMinutes = 0 } = useQuery({
+    queryKey: ['totalLearningMinutes', user?.id],
+    queryFn: async () => {
+      if (!user) return 0;
+      // Get all completed lesson ids for the user
+      const { data: progress, error: progressError } = await supabase
+        .from('lesson_progress')
+        .select('lesson_id')
+        .eq('student_id', user.id)
+        .eq('completed', true);
+      if (progressError || !progress) return 0;
+      const lessonIds = progress.map((p: any) => p.lesson_id);
+      if (!lessonIds.length) return 0;
+      // Get the sum of durations for these lessons
+      const { data: lessons, error: lessonsError } = await supabase
+        .from('course_lessons')
+        .select('duration')
+        .in('id', lessonIds);
+      if (lessonsError || !lessons) return 0;
+      const totalMinutes = lessons.reduce((sum: number, l: any) => sum + (l.duration || 0), 0);
+      return totalMinutes;
     },
     enabled: !!user,
   });
@@ -146,6 +230,103 @@ const Dashboard = () => {
       });
   };
 
+  if (profile?.role === 'teacher') {
+    return (
+      <div className="container mx-auto animate-fade-in">
+        <div className="mb-8">
+          <h1 className="text-3xl md:text-4xl font-bold mb-2">Teacher Dashboard</h1>
+          <p className="text-gray-600">Welcome back, {profile?.name || 'Teacher'}</p>
+        </div>
+        <h2 className="text-xl font-semibold mb-4">MY COURSES</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {isLoadingTeacherCourses ? (
+            Array(3).fill(0).map((_, i) => (
+              <div key={i} className="rounded-xl p-6 bg-slate-100">
+                <div className="space-y-3">
+                  <Skeleton className="h-6 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                  <div className="mt-12">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-2 w-full mt-2" />
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : teacherCourses.length === 0 ? (
+            <div className="col-span-full text-center p-8 bg-slate-50 rounded-xl">
+              <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">No courses yet</h3>
+              <p className="text-muted-foreground mb-4">You have not registered as an instructor for any course.</p>
+            </div>
+          ) : (
+            teacherCourses.map((course: any) => (
+              <CourseCard 
+                key={course.id}
+                id={course.id}
+                title={course.title}
+                instructor={profile?.name || 'You'}
+                color={'bg-brightmind-lightpurple text-brightmind-purple'}
+                progress={{ completed: 0, total: 100 }}
+                onClick={() => navigate(`/courses/${course.id}`)}
+              />
+            ))
+          )}
+        </div>
+        <h2 className="text-xl font-semibold mb-4">ASSIGNMENTS</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {isLoadingTeacherAssignments ? (
+            Array(3).fill(0).map((_, i) => (
+              <div key={i} className="rounded-xl p-6 bg-slate-100">
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            ))
+          ) : teacherAssignments.length === 0 ? (
+            <div className="col-span-full text-center p-8 bg-slate-50 rounded-xl">
+              <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">No assignments yet</h3>
+              <p className="text-muted-foreground mb-4">No assignments have been created for your courses.</p>
+            </div>
+          ) : (
+            teacherAssignments.map((assignment: any) => (
+              <div key={assignment.id} className="rounded-xl p-6 bg-white shadow">
+                <div className="font-semibold text-lg mb-2">{assignment.title}</div>
+                <div className="text-sm text-gray-500 mb-2">Due: {assignment.due_date ? new Date(assignment.due_date).toLocaleDateString() : 'N/A'}</div>
+                <Button size="sm" onClick={() => navigate(`/courses/${assignment.course_id}`)}>Go to Course</Button>
+              </div>
+            ))
+          )}
+        </div>
+        <h2 className="text-xl font-semibold mb-4">SCHEDULED LIVE CLASSES</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {isLoadingTeacherLiveClasses ? (
+            Array(3).fill(0).map((_, i) => (
+              <div key={i} className="rounded-xl p-6 bg-slate-100">
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            ))
+          ) : teacherLiveClasses.length === 0 ? (
+            <div className="col-span-full text-center p-8 bg-slate-50 rounded-xl">
+              <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">No live classes scheduled</h3>
+              <p className="text-muted-foreground mb-4">You have not scheduled any live classes yet.</p>
+            </div>
+          ) : (
+            teacherLiveClasses.map((liveClass: any) => (
+              <div key={liveClass.id} className="rounded-xl p-6 bg-white shadow">
+                <div className="font-semibold text-lg mb-2">{liveClass.title}</div>
+                <div className="text-sm text-gray-500 mb-2">Start: {liveClass.start_time ? new Date(liveClass.start_time).toLocaleString() : 'N/A'}</div>
+                <div className="text-sm text-gray-500 mb-2">Duration: {liveClass.duration} min</div>
+                <Button size="sm" onClick={() => navigate(`/courses/${liveClass.course_id}`)}>Go to Course</Button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-10 gap-4">
@@ -181,13 +362,13 @@ const Dashboard = () => {
         />
         <StatCard 
           icon={<BookOpen className="h-6 w-6 text-brightmind-purple" />}
-          label="Active Prototypes"
-          value="7"
+          label="Lessons Completed"
+          value={completedLessonsCount.toString()}
         />
         <StatCard 
           icon={<Clock className="h-6 w-6 text-brightmind-blue" />}
           label="Hours Learning"
-          value={formatHours(totalHours)}
+          value={formatHours(totalLearningMinutes / 60)}
         />
         <StatCard 
           icon={<Users className="h-6 w-6 text-brightmind-purple" />}

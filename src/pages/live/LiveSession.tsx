@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { 
@@ -22,6 +21,9 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useAuth } from '@/providers/AuthProvider';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ChatMessage {
   id: string;
@@ -82,6 +84,7 @@ const mockParticipants = [
 
 const LiveSession = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const { user } = useAuth();
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(mockChatMessages);
   const [messageInput, setMessageInput] = useState('');
   const [isMuted, setIsMuted] = useState(false);
@@ -93,6 +96,22 @@ const LiveSession = () => {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
+  
+  // Fetch live session details
+  const { data: session, isLoading } = useQuery({
+    queryKey: ['liveSession', sessionId],
+    queryFn: async () => {
+      if (!sessionId) return null;
+      const { data, error } = await supabase
+        .from('live_classes')
+        .select('*, instructor:instructor_id(name), course:courses(title)')
+        .eq('id', sessionId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!sessionId
+  });
   
   const sendMessage = () => {
     if (!messageInput.trim()) return;

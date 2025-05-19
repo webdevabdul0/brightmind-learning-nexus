@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -21,20 +20,44 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, sendNotifications } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 
 const CourseDetail = () => {
   const { courseId } = useParams<{ courseId: string }>();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [currentTab, setCurrentTab] = useState('content');
   const [videoDialogOpen, setVideoDialogOpen] = useState(false);
   const [currentVideoUrl, setCurrentVideoUrl] = useState('');
   const [currentLessonId, setCurrentLessonId] = useState<string | null>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [addModuleDialogOpen, setAddModuleDialogOpen] = useState(false);
+  const [addLessonDialogOpen, setAddLessonDialogOpen] = useState(false);
+  const [addAssignmentDialogOpen, setAddAssignmentDialogOpen] = useState(false);
+  const [viewStudentsDialogOpen, setViewStudentsDialogOpen] = useState(false);
+  const [newModuleTitle, setNewModuleTitle] = useState('');
+  const [newLessonTitle, setNewLessonTitle] = useState('');
+  const [newLessonType, setNewLessonType] = useState('video');
+  const [newLessonModuleId, setNewLessonModuleId] = useState('');
+  const [newLessonVideoUrl, setNewLessonVideoUrl] = useState('');
+  const [newAssignmentTitle, setNewAssignmentTitle] = useState('');
+  const [newAssignmentDueDate, setNewAssignmentDueDate] = useState('');
+  const [students, setStudents] = useState([]);
+  const [scheduleLiveClassDialogOpen, setScheduleLiveClassDialogOpen] = useState(false);
+  const [liveClassTitle, setLiveClassTitle] = useState('');
+  const [liveClassStartTime, setLiveClassStartTime] = useState('');
+  const [liveClassDuration, setLiveClassDuration] = useState('');
+  const [liveClassMeetingUrl, setLiveClassMeetingUrl] = useState('');
+  const [newLessonContent, setNewLessonContent] = useState('');
+  const [newLessonDuration, setNewLessonDuration] = useState('');
+  const [textLessonDialogOpen, setTextLessonDialogOpen] = useState(false);
+  const [currentTextLessonContent, setCurrentTextLessonContent] = useState('');
 
   // Fetch course details
   const { data: course, isLoading: isLoadingCourse } = useQuery({
@@ -118,27 +141,18 @@ const CourseDetail = () => {
     enabled: !!courseId
   });
 
-  // Fetch course assignments
+  // Fetch assignments for the current course only
   const { data: assignments = [], isLoading: isLoadingAssignments } = useQuery({
-    queryKey: ['courseAssignments', courseId],
+    queryKey: ['assignments', courseId],
     queryFn: async () => {
       if (!courseId) return [];
-
       const { data, error } = await supabase
         .from('assignments')
         .select('*')
         .eq('course_id', courseId)
         .order('due_date');
-
-      if (error) {
-        toast({
-          title: "Error fetching assignments",
-          description: error.message,
-          variant: "destructive"
-        });
-        throw error;
-      }
-
+      if (error) throw error;
+      console.log('Fetched assignments for course', courseId, data);
       return data;
     },
     enabled: !!courseId
@@ -149,15 +163,13 @@ const CourseDetail = () => {
     queryKey: ['enrollment', courseId, user?.id],
     queryFn: async () => {
       if (!courseId || !user) return null;
-
       const { data, error } = await supabase
         .from('enrollments')
         .select('*')
         .eq('course_id', courseId)
         .eq('student_id', user.id)
-        .single();
-
-      if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        .maybeSingle();
+      if (error) {
         toast({
           title: "Error fetching enrollment",
           description: error.message,
@@ -165,7 +177,6 @@ const CourseDetail = () => {
         });
         throw error;
       }
-
       return data;
     },
     enabled: !!courseId && !!user
@@ -303,6 +314,191 @@ const CourseDetail = () => {
       });
     }
   });
+
+  // Add mutation for teacher registration
+  const registerAsTeacherMutation = useMutation({
+    mutationFn: async () => {
+      if (!courseId || !user) throw new Error('Missing course ID or user');
+      const { error } = await supabase
+        .from('courses')
+        .update({ instructor_id: user.id })
+        .eq('id', courseId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['course', courseId] });
+      toast({ title: 'Registered as teacher', description: 'You are now the instructor for this course.' });
+    },
+    onError: (error) => {
+      toast({ title: 'Registration failed', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  // Add module mutation
+  const addModuleMutation = useMutation({
+    mutationFn: async () => {
+      if (!courseId || !newModuleTitle) throw new Error('Missing data');
+      const { error } = await supabase
+        .from('course_modules')
+        .insert({ course_id: courseId, title: newModuleTitle, position: modules.length + 1 });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseModules', courseId] });
+      setAddModuleDialogOpen(false);
+      setNewModuleTitle('');
+      toast({ title: 'Module added' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to add module', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  // Add lesson mutation
+  const addLessonMutation = useMutation({
+    mutationFn: async () => {
+      if (!newLessonModuleId || !newLessonTitle) throw new Error('Missing data');
+      const insertData = {
+        module_id: newLessonModuleId,
+        title: newLessonTitle,
+        type: newLessonType,
+        video_url: newLessonType === 'video' ? newLessonVideoUrl : null,
+        content: newLessonType === 'text' ? newLessonContent : null,
+        duration: newLessonDuration ? parseInt(newLessonDuration, 10) : null,
+        position: modules.find(m => m.id === newLessonModuleId)?.lessons.length + 1 || 1
+      };
+      const { error } = await supabase
+        .from('course_lessons')
+        .insert(insertData);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseModules', courseId] });
+      setAddLessonDialogOpen(false);
+      setNewLessonTitle('');
+      setNewLessonType('video');
+      setNewLessonModuleId('');
+      setNewLessonVideoUrl('');
+      setNewLessonContent('');
+      setNewLessonDuration('');
+      toast({ title: 'Lesson added' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to add lesson', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  // Add assignment mutation
+  const addAssignmentMutation = useMutation({
+    mutationFn: async () => {
+      if (!courseId || !newAssignmentTitle || !newAssignmentDueDate) throw new Error('Missing data');
+      const { data, error } = await supabase
+        .from('assignments')
+        .insert({
+          course_id: courseId,
+          title: newAssignmentTitle,
+          due_date: newAssignmentDueDate
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: async (assignment) => {
+      queryClient.invalidateQueries({ queryKey: ['assignments', courseId] });
+      setAddAssignmentDialogOpen(false);
+      setNewAssignmentTitle('');
+      setNewAssignmentDueDate('');
+      toast({ title: 'Assignment added' });
+      // Notify all enrolled students
+      const { data: enrollments } = await supabase
+        .from('enrollments')
+        .select('student_id')
+        .eq('course_id', courseId);
+      if (enrollments && enrollments.length > 0) {
+        const studentIds = enrollments.map((e: any) => e.student_id);
+        await sendNotifications(
+          studentIds,
+          'New Assignment',
+          `A new assignment "${assignment.title}" has been added to your course.`,
+          'assignment',
+          `/courses/${courseId}`
+        );
+      }
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to add assignment', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  // Schedule live class mutation
+  const scheduleLiveClassMutation = useMutation({
+    mutationFn: async () => {
+      if (!courseId || !user || !liveClassTitle || !liveClassStartTime || !liveClassDuration || !liveClassMeetingUrl) throw new Error('Missing data');
+      const { data, error } = await supabase
+        .from('live_classes')
+        .insert({
+          course_id: courseId,
+          instructor_id: user.id,
+          title: liveClassTitle,
+          start_time: liveClassStartTime,
+          duration: parseInt(liveClassDuration, 10),
+          meeting_url: liveClassMeetingUrl
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: async (liveClass) => {
+      setScheduleLiveClassDialogOpen(false);
+      setLiveClassTitle('');
+      setLiveClassStartTime('');
+      setLiveClassDuration('');
+      setLiveClassMeetingUrl('');
+      toast({ title: 'Live class scheduled' });
+      // Notify all enrolled students
+      const { data: enrollments } = await supabase
+        .from('enrollments')
+        .select('student_id')
+        .eq('course_id', courseId);
+      if (enrollments && enrollments.length > 0) {
+        const studentIds = enrollments.map((e: any) => e.student_id);
+        await sendNotifications(
+          studentIds,
+          'New Live Class',
+          `A new live class "${liveClass.title}" has been scheduled for your course.`,
+          'live_class',
+          `/courses/${courseId}`
+        );
+      }
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to schedule live class', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  // Fetch students for this course
+  const fetchStudents = async () => {
+    if (!courseId) return;
+    const { data, error } = await supabase
+      .from('enrollments')
+      .select('student:student_id(id, name, email)')
+      .eq('course_id', courseId);
+    if (!error) setStudents(data.map(e => e.student));
+  };
+
+  const handleStartLesson = (lesson: any) => {
+    if (lesson.type === 'video') {
+      handlePlayVideo(lesson);
+    } else if (lesson.type === 'text') {
+      setCurrentTextLessonContent(lesson.content || '');
+      setCurrentLessonId(lesson.id);
+      setTextLessonDialogOpen(true);
+      // Optionally mark as completed immediately for text lessons
+      handleCompleteLesson(lesson.id);
+    }
+  };
 
   const handlePlayVideo = (lesson: any) => {
     if (!user) {
@@ -513,7 +709,8 @@ const CourseDetail = () => {
               
               <p className="max-w-2xl">{course.description}</p>
               
-              {!enrollment && (
+              {/* Only show enroll button if not enrolled and user is a student */}
+              {profile?.role === 'student' && !enrollment && (
                 <div className="mt-6">
                   <Button 
                     onClick={handleEnroll}
@@ -531,8 +728,37 @@ const CourseDetail = () => {
                   </Button>
                 </div>
               )}
+              {/* Show Register as Teacher button if teacher and no instructor */}
+              {profile?.role === 'teacher' && !course.instructor_id && (
+                <div className="mt-6">
+                  <Button 
+                    onClick={() => registerAsTeacherMutation.mutate()}
+                    disabled={registerAsTeacherMutation.isPending}
+                    className="bg-brightmind-blue text-white hover:bg-brightmind-blue/90"
+                  >
+                    {registerAsTeacherMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Registering...
+                      </>
+                    ) : (
+                      <>Register as a Teacher</>
+                    )}
+                  </Button>
+                </div>
+              )}
+              {/* After registration, show management UI for the instructor */}
+              {profile?.role === 'teacher' && course.instructor_id === user?.id && (
+                <div className="mt-6 space-y-2">
+                  <Button variant="secondary" className="w-full" onClick={() => setAddModuleDialogOpen(true)}>Add Module</Button>
+                  <Button variant="secondary" className="w-full" onClick={() => setAddLessonDialogOpen(true)}>Add Lesson</Button>
+                  <Button variant="secondary" className="w-full" onClick={() => setAddAssignmentDialogOpen(true)}>Add Assignment</Button>
+                  <Button variant="secondary" className="w-full" onClick={() => { fetchStudents(); setViewStudentsDialogOpen(true); }}>View Enrolled Students</Button>
+                  <Button variant="secondary" className="w-full" onClick={() => setScheduleLiveClassDialogOpen(true)}>Schedule Live Class</Button>
+                </div>
+              )}
             </div>
-            {enrollment && (
+            {enrollment && profile?.role === 'student' && (
               <div className="mt-6 lg:mt-0 lg:ml-6 lg:self-end">
                 <div className="bg-white/10 backdrop-blur-sm p-4 rounded-lg inline-block">
                   <div className="text-center mb-3">
@@ -595,13 +821,16 @@ const CourseDetail = () => {
                                   <Clock className="w-3 h-3 mr-1" />
                                   <span>{lesson.duration || 'N/A'} min</span>
                                 </div>
+                                {lesson.type === 'text' && lesson.content && (
+                                  <div className="prose max-w-none mt-2" dangerouslySetInnerHTML={{ __html: lesson.content }} />
+                                )}
                               </div>
                             </div>
                             
                             <Button 
                               variant="ghost" 
                               size="sm"
-                              onClick={() => handlePlayVideo(lesson)}
+                              onClick={() => handleStartLesson(lesson)}
                               disabled={!enrollment && lesson.type === 'video'}
                             >
                               <PlayCircle className="mr-1 h-4 w-4" />
@@ -663,7 +892,6 @@ const CourseDetail = () => {
                       </div>
                     </div>
                   </div>
-                  
                   <Button 
                     variant="default"
                     size="sm"
@@ -693,22 +921,8 @@ const CourseDetail = () => {
                 <li className="flex items-center justify-between p-2 hover:bg-muted/20 rounded">
                   <div className="flex items-center">
                     <BookOpen className="w-4 h-4 mr-2 text-brightmind-blue" />
-                    <span>Course Syllabus</span>
+                    <span>No materials uploaded yet.</span>
                   </div>
-                  <Button variant="ghost" size="sm" disabled={!enrollment}>
-                    <Download className="h-4 w-4 mr-1" />
-                    Download
-                  </Button>
-                </li>
-                <li className="flex items-center justify-between p-2 hover:bg-muted/20 rounded">
-                  <div className="flex items-center">
-                    <FileText className="w-4 h-4 mr-2 text-brightmind-purple" />
-                    <span>Practice Problems</span>
-                  </div>
-                  <Button variant="ghost" size="sm" disabled={!enrollment}>
-                    <Download className="h-4 w-4 mr-1" />
-                    Download
-                  </Button>
                 </li>
               </ul>
             </div>
@@ -739,6 +953,95 @@ const CourseDetail = () => {
               allowFullScreen
             ></iframe>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Module Dialog */}
+      <Dialog open={addModuleDialogOpen} onOpenChange={setAddModuleDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add Module</DialogTitle></DialogHeader>
+          <Input placeholder="Module Title" value={newModuleTitle} onChange={e => setNewModuleTitle(e.target.value)} />
+          <Button className="mt-4 w-full" onClick={() => addModuleMutation.mutate()} disabled={addModuleMutation.isPending}>Add Module</Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Lesson Dialog */}
+      <Dialog open={addLessonDialogOpen} onOpenChange={setAddLessonDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add Lesson</DialogTitle></DialogHeader>
+          <select className="w-full mb-2" value={newLessonModuleId} onChange={e => setNewLessonModuleId(e.target.value)}>
+            <option value="">Select Module</option>
+            {modules.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
+          </select>
+          <Input placeholder="Lesson Title" value={newLessonTitle} onChange={e => setNewLessonTitle(e.target.value)} />
+          <select className="w-full mt-2" value={newLessonType} onChange={e => setNewLessonType(e.target.value)}>
+            <option value="video">Video</option>
+            <option value="text">Text</option>
+          </select>
+          {newLessonType === 'video' && (
+            <Input className="mt-2" placeholder="YouTube Video URL" value={newLessonVideoUrl} onChange={e => setNewLessonVideoUrl(e.target.value)} />
+          )}
+          {newLessonType === 'text' && (
+            <div className="mt-2">
+              <ReactQuill value={newLessonContent} onChange={setNewLessonContent} theme="snow"
+                style={{ maxHeight: 600, overflowY: 'auto' }}
+              />
+            </div>
+          )}
+          <Input className="mt-2" type="number" min="1" placeholder="Duration (minutes)" value={newLessonDuration} onChange={e => setNewLessonDuration(e.target.value)} />
+          <Button className="mt-4 w-full" onClick={() => addLessonMutation.mutate()} disabled={addLessonMutation.isPending}>Add Lesson</Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Assignment Dialog */}
+      <Dialog open={addAssignmentDialogOpen} onOpenChange={setAddAssignmentDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add Assignment</DialogTitle></DialogHeader>
+          <Input placeholder="Assignment Title" value={newAssignmentTitle} onChange={e => setNewAssignmentTitle(e.target.value)} />
+          <Input type="date" className="mt-2" value={newAssignmentDueDate} onChange={e => setNewAssignmentDueDate(e.target.value)} />
+          <Button className="mt-4 w-full" onClick={() => addAssignmentMutation.mutate()} disabled={addAssignmentMutation.isPending}>Add Assignment</Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Students Dialog */}
+      <Dialog open={viewStudentsDialogOpen} onOpenChange={setViewStudentsDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Enrolled Students</DialogTitle></DialogHeader>
+          <ul className="space-y-2">
+            {students.length === 0 ? (
+              <li>No students enrolled yet.</li>
+            ) : students.map(s => (
+              <li key={s.id} className="flex items-center gap-2">
+                <Avatar className="h-6 w-6"><AvatarFallback>{s.name?.charAt(0) || 'S'}</AvatarFallback></Avatar>
+                <span>{s.name} ({s.email})</span>
+              </li>
+            ))}
+          </ul>
+        </DialogContent>
+      </Dialog>
+
+      {/* Schedule Live Class Dialog */}
+      <Dialog open={scheduleLiveClassDialogOpen} onOpenChange={setScheduleLiveClassDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Schedule Live Class</DialogTitle></DialogHeader>
+          <Input placeholder="Title" value={liveClassTitle} onChange={e => setLiveClassTitle(e.target.value)} />
+          <Input type="datetime-local" className="mt-2" value={liveClassStartTime} onChange={e => setLiveClassStartTime(e.target.value)} />
+          <Input type="number" className="mt-2" placeholder="Duration (minutes)" value={liveClassDuration} onChange={e => setLiveClassDuration(e.target.value)} />
+          <Input className="mt-2" placeholder="Meeting URL" value={liveClassMeetingUrl} onChange={e => setLiveClassMeetingUrl(e.target.value)} />
+          <Button className="mt-4 w-full" onClick={() => scheduleLiveClassMutation.mutate()} disabled={scheduleLiveClassMutation.isPending}>Schedule</Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* Text Lesson Dialog */}
+      <Dialog open={textLessonDialogOpen} onOpenChange={setTextLessonDialogOpen}>
+        <DialogContent className="max-w-2xl w-[90vw] h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Lesson Content</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto prose max-w-none" style={{ minHeight: 0 }}>
+            <div dangerouslySetInnerHTML={{ __html: currentTextLessonContent }} />
+          </div>
+          <Button className="mt-4" onClick={() => setTextLessonDialogOpen(false)}>Close</Button>
         </DialogContent>
       </Dialog>
     </div>

@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
@@ -31,6 +30,11 @@ const Profile = () => {
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const queryClient = useQueryClient();
+  
+  // Only allow the user, teachers, or admins to view/edit
+  if (!user || (!['teacher', 'admin'].includes(profile?.role) && user.id !== profile?.id)) {
+    return <div className="p-8 text-center text-red-600 font-bold">Unauthorized</div>;
+  }
   
   // Form state
   const [profileForm, setProfileForm] = useState({

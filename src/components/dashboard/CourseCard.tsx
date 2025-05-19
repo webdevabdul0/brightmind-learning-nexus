@@ -1,4 +1,3 @@
-
 import { MoreVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -14,6 +13,10 @@ interface CourseCardProps {
   color: string;
   progress: CourseProgress;
   onClick?: () => void;
+  isEnrolled?: boolean;
+  isLoadingEnrollments?: boolean;
+  userRole?: string;
+  onEnroll?: (courseId: string, e: React.MouseEvent) => void;
 }
 
 const CourseCard = ({ 
@@ -22,7 +25,11 @@ const CourseCard = ({
   instructor, 
   color, 
   progress,
-  onClick 
+  onClick,
+  isEnrolled = false,
+  isLoadingEnrollments = false,
+  userRole = '',
+  onEnroll
 }: CourseCardProps) => {
   const progressPercent = Math.round((progress.completed / progress.total) * 100);
   
@@ -40,6 +47,21 @@ const CourseCard = ({
           <MoreVertical className="h-5 w-5" />
         </Button>
       </div>
+      
+      {/* Enroll button for students only, not enrolled, not loading */}
+      {!isLoadingEnrollments && !isEnrolled && userRole === 'student' && onEnroll && (
+        <div className="absolute bottom-4 right-4">
+          <Button 
+            size="sm" 
+            onClick={e => {
+              e.stopPropagation();
+              onEnroll(id, e);
+            }}
+          >
+            Enroll
+          </Button>
+        </div>
+      )}
       
       <div className="mt-8 sm:mt-12">
         <div className="flex justify-between text-sm mb-2">

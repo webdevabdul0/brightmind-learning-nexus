@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -26,6 +25,7 @@ import Profile from "@/pages/profile/Profile";
 import Notifications from "@/pages/notifications/Notifications";
 import Performance from "@/pages/performance/Performance";
 import Settings from "@/pages/settings/Settings";
+import AdminDashboard from "@/pages/admin/AdminDashboard";
 
 // Other pages
 import NotFound from "@/pages/NotFound";
@@ -52,6 +52,15 @@ const App = () => (
             <RequireAuth>
               <SidebarLayout>
                 <Dashboard />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          {/* Admin route */}
+          <Route path="/admin" element={
+            <RequireAuth allowedRoles={['admin']}>
+              <SidebarLayout>
+                <AdminDashboard />
               </SidebarLayout>
             </RequireAuth>
           } />

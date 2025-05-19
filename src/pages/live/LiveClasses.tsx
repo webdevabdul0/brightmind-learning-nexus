@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Calendar, Search, Video, Users, MessageSquare, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -6,68 +5,41 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/providers/AuthProvider';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
-interface LiveSession {
-  id: string;
-  title: string;
-  instructor: string;
-  subject: string;
-  date: Date;
-  duration: string;
-  participants: number;
-  status: 'scheduled' | 'ongoing' | 'completed';
-}
-
-const mockLiveSessions: LiveSession[] = [
-  {
-    id: '1',
-    title: 'Physics Problem Solving Session',
-    instructor: 'Dr. Sarah Johnson',
-    subject: 'Physics',
-    date: new Date(2023, 5, 15, 10, 0), // June 15, 2023, 10:00 AM
-    duration: '60 min',
-    participants: 45,
-    status: 'scheduled'
-  },
-  {
-    id: '2',
-    title: 'Mathematics Formula Mastery',
-    instructor: 'Prof. Michael Chen',
-    subject: 'Mathematics',
-    date: new Date(2023, 5, 12, 14, 30), // June 12, 2023, 2:30 PM
-    duration: '90 min',
-    participants: 32,
-    status: 'ongoing'
-  },
-  {
-    id: '3',
-    title: 'English Literature Analysis',
-    instructor: 'Ms. Emily Parker',
-    subject: 'English',
-    date: new Date(2023, 5, 10, 11, 0), // June 10, 2023, 11:00 AM
-    duration: '75 min',
-    participants: 38,
-    status: 'completed'
-  },
-  {
-    id: '4',
-    title: 'Chemistry Laboratory Techniques',
-    instructor: 'Dr. James Wilson',
-    subject: 'Chemistry',
-    date: new Date(2023, 5, 18, 15, 0), // June 18, 2023, 3:00 PM
-    duration: '120 min',
-    participants: 28,
-    status: 'scheduled'
-  }
-];
+// Helper to determine status (move to module scope)
+const getStatus = (session) => {
+  const now = new Date();
+  const start = new Date(session.start_time);
+  const end = new Date(start.getTime() + (session.duration || 0) * 60000);
+  if (now < start) return 'scheduled';
+  if (now >= start && now <= end) return 'ongoing';
+  return 'completed';
+};
 
 const LiveClasses = () => {
+  const { user, profile } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredSessions = mockLiveSessions.filter(session => 
+  // Fetch live classes from Supabase
+  const { data: liveClasses = [], isLoading } = useQuery({
+    queryKey: ['liveClasses'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('live_classes')
+        .select(`*, instructor:instructor_id(name), course:courses(title)`)
+        .order('start_time', { ascending: false });
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  const filteredSessions = liveClasses.filter(session => 
     session.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    session.instructor.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    session.subject.toLowerCase().includes(searchQuery.toLowerCase())
+    (session.instructor?.name && session.instructor.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (session.course?.title && session.course.title.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const formatDate = (date: Date) => {
@@ -81,7 +53,7 @@ const LiveClasses = () => {
     }).format(date);
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status) => {
     switch (status) {
       case 'ongoing': return 'bg-green-500';
       case 'scheduled': return 'bg-blue-500';
@@ -125,7 +97,7 @@ const LiveClasses = () => {
         <TabsContent value="upcoming" className="mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredSessions
-              .filter(session => session.status === 'scheduled')
+              .filter(session => getStatus(session) === 'scheduled')
               .map(session => (
                 <LiveClassCard key={session.id} session={session} />
               ))}
@@ -135,7 +107,7 @@ const LiveClasses = () => {
         <TabsContent value="ongoing" className="mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredSessions
-              .filter(session => session.status === 'ongoing')
+              .filter(session => getStatus(session) === 'ongoing')
               .map(session => (
                 <LiveClassCard key={session.id} session={session} />
               ))}
@@ -145,7 +117,7 @@ const LiveClasses = () => {
         <TabsContent value="past" className="mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredSessions
-              .filter(session => session.status === 'completed')
+              .filter(session => getStatus(session) === 'completed')
               .map(session => (
                 <LiveClassCard key={session.id} session={session} />
               ))}
@@ -157,7 +129,7 @@ const LiveClasses = () => {
 };
 
 interface LiveClassCardProps {
-  session: LiveSession;
+  session: any;
 }
 
 const LiveClassCard = ({ session }: LiveClassCardProps) => {
@@ -181,13 +153,20 @@ const LiveClassCard = ({ session }: LiveClassCardProps) => {
     }
   };
 
+  const status = getStatus(session);
+  const handleJoin = () => {
+    if (session.meeting_url) {
+      window.open(session.meeting_url, '_blank');
+    }
+  };
+
   return (
     <Card className="overflow-hidden transition-all hover:shadow-md">
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
           <div>
-            <Badge className={getStatusColor(session.status)} variant="secondary">
-              {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
+            <Badge className={getStatusColor(status)} variant="secondary">
+              {status.charAt(0).toUpperCase() + status.slice(1)}
             </Badge>
             <CardTitle className="mt-2">{session.title}</CardTitle>
             <CardDescription>{session.instructor}</CardDescription>
@@ -198,7 +177,7 @@ const LiveClassCard = ({ session }: LiveClassCardProps) => {
         <div className="space-y-2">
           <div className="flex items-center text-sm">
             <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
-            <span>{formatDate(session.date)}</span>
+            <span>{formatDate(new Date(session.start_time))}</span>
           </div>
           <div className="flex items-center text-sm">
             <Clock className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -216,18 +195,22 @@ const LiveClassCard = ({ session }: LiveClassCardProps) => {
             <Calendar className="h-4 w-4 mr-1" />
             Remind Me
           </Button>
-          <Button size="sm" className={session.status === 'completed' ? 'bg-gray-500' : ''}>
-            {session.status === 'ongoing' ? (
-              <>
-                <Video className="h-4 w-4 mr-1" />
-                Join Now
-              </>
-            ) : session.status === 'scheduled' ? (
-              'Register'
-            ) : (
-              'View Recording'
-            )}
-          </Button>
+          {status === 'ongoing' || status === 'scheduled' ? (
+            <Button size="sm" onClick={handleJoin} disabled={!session.meeting_url}>
+              {status === 'ongoing' ? (
+                <>
+                  <Video className="h-4 w-4 mr-1" />
+                  Join Now
+                </>
+              ) : (
+                'Register'
+              )}
+            </Button>
+          ) : (
+            <Button size="sm" disabled>
+              View Recording
+            </Button>
+          )}
         </div>
       </CardFooter>
     </Card>

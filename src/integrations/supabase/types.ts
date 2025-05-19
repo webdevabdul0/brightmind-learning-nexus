@@ -635,3 +635,39 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
+export type AdminCourse = {
+  id: string;
+  title: string;
+  instructor_id: string;
+  instructor?: { name: string };
+  enrollments?: { count: number }[];
+  category?: string;
+};
+
+export type AdminStudent = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+};
+
+export type AdminAssignment = {
+  id: string;
+  title: string;
+  due_date: string;
+  course_id: string;
+  course?: { title: string };
+  submissions?: { count: number }[];
+  created_at: string;
+};
+
+export type AdminLecture = {
+  id: string;
+  title: string;
+  course_id: string;
+  module_id: string;
+  created_at: string;
+  course?: { title: string };
+  module?: { title: string };
+};
