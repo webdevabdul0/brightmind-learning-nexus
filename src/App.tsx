@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/providers/AuthProvider";
 
 // Layout
@@ -46,6 +46,9 @@ const App = () => (
           <Route path="/signup" element={<Signup />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/reset-password-update" element={<ResetPasswordUpdate />} />
+          
+          {/* Redirect from index page to root */}
+          <Route path="/index" element={<Navigate to="/" replace />} />
           
           {/* Protected routes */}
           <Route path="/" element={
