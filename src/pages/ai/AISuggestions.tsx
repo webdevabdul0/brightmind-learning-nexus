@@ -52,7 +52,7 @@ You are a helpful AI assistant for an O/A Level learning platform. Your job is t
 
 const API_ENDPOINT = "https://models.github.ai/inference";
 const MODEL = "openai/gpt-4.1";
-const API_TOKEN = "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";
+const API_TOKEN = process.env.NEXT_PUBLIC_GITHUB_API_TOKEN;
 
 // Memory Context for storing chat memory
 const MemoryContext = createContext({ memory: [], addToMemory: (entry: any) => {}, clearMemory: () => {} });
