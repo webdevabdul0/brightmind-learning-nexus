@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { Search, Filter, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,31 @@ import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/hooks/use-toast';
+import { useCourseProgress } from '@/hooks/useCourseProgress';
+
+const COURSE_COLORS = [
+  'bg-brightmind-purple text-white',
+  'bg-brightmind-blue text-white',
+  'bg-blue-500 text-white',
+  'bg-green-500 text-white',
+  'bg-indigo-500 text-white',
+  'bg-fuchsia-500 text-white',
+  'bg-rose-500 text-white',
+  'bg-orange-500 text-white',
+  'bg-amber-500 text-white',
+  'bg-emerald-500 text-white',
+  'bg-cyan-500 text-white',
+  'bg-violet-500 text-white',
+  'bg-pink-500 text-white',
+  'bg-red-500 text-white',
+  'bg-blue-500 text-white',
+  'bg-green-500 text-white',
+  'bg-indigo-500 text-white',
+];
+
+function getRandomColor(idx: number) {
+  return COURSE_COLORS[idx % COURSE_COLORS.length];
+}
 
 const CourseList = () => {
   const { user, profile } = useAuth();
@@ -116,6 +141,40 @@ const CourseList = () => {
     (selectedCategory === 'All' || course.category === selectedCategory)
   );
 
+  // --- NEW: Gather all visible course IDs for progress ---
+  const visibleCourses = Array.from(new Set([
+    ...filteredCourses.map((c: any) => c.id),
+    ...enrolledCourses.map((c: any) => c.id),
+  ]));
+
+  // --- NEW: Fetch progress for all visible courses in parallel ---
+  const courseProgressResults = useQueries({
+    queries: visibleCourses.map((courseId: string) => ({
+      queryKey: ['courseProgress', courseId, user?.id],
+      queryFn: async () => {
+        if (!courseId || !user?.id) return { percent: 0, completed: 0, total: 0 };
+        const { data, error } = await supabase
+          .from('course_progress')
+          .select('percent, completed, total')
+          .eq('student_id', user.id)
+          .eq('course_id', courseId)
+          .maybeSingle();
+        if (error || !data) return { percent: 0, completed: 0, total: 0 };
+        return data;
+      },
+      enabled: !!user && !!courseId && profile?.role === 'student',
+    })),
+  }) as any;
+
+  // --- NEW: Map courseId to progress for quick lookup ---
+  const courseIdToProgress: Record<string, { percent: number; completed: number; total: number }> = {};
+  visibleCourses.forEach((courseId: string, idx: number) => {
+    courseIdToProgress[courseId] =
+      courseProgressResults[idx] && courseProgressResults[idx].data !== undefined
+        ? courseProgressResults[idx].data
+        : { percent: 0, completed: 0, total: 0 };
+  });
+
   const handleCourseClick = (courseId: string) => {
     navigate(`/courses/${courseId}`);
   };
@@ -171,41 +230,30 @@ const CourseList = () => {
     }
   };
 
-  // Generate a course card with proper color
-  const generateCourseCard = (course: any) => {
-    // Generate a color based on the category or use default colors
-    const colors = [
-      'bg-brightmind-lightpurple text-brightmind-purple',
-      'bg-brightmind-lightblue text-brightmind-blue',
-      'bg-blue-100 text-blue-600',
-      'bg-green-100 text-green-600',
-      'bg-amber-100 text-amber-600',
-      'bg-indigo-100 text-indigo-600'
-    ];
-    
-    const colorIndex = Math.abs(course.title.charCodeAt(0) + course.title.charCodeAt(course.title.length - 1)) % colors.length;
-    
-    const isEnrolled = enrolledCourseIds.includes(course.id);
-    const enrollment = enrollments.find((e: any) => e.course_id === course.id);
-    
+  // Child component to handle hook usage per card
+  const CourseCardWithProgress = ({ course, isEnrolled, profile, onClick, isLoadingEnrollments, onEnroll }) => {
+    const { completed, total } = useCourseProgress(course.id, user?.id);
+    // Use a hash of course id and title for more randomness
+    const hash = Math.abs(
+      [...course.id + course.title].reduce((acc, c) => acc + c.charCodeAt(0), 0)
+    );
+    const color = getRandomColor(hash);
     return (
-      <div key={course.id} className="relative">
-        <CourseCard
-          id={course.id}
-          title={course.title}
-          instructor={course.instructor?.name || 'Instructor'}
-          color={colors[colorIndex]}
-          progress={{ 
-            completed: isEnrolled && enrollment ? enrollment.progress : 0, 
-            total: 100 
-          }}
-          onClick={() => handleCourseClick(course.id)}
-          isEnrolled={isEnrolled}
-          isLoadingEnrollments={isLoadingEnrollments}
-          userRole={profile?.role}
-          onEnroll={enrollInCourse}
-        />
-      </div>
+      <CourseCard
+        id={course.id}
+        title={course.title}
+        instructor={course.instructor?.name || 'Instructor'}
+        color={color}
+        progress={{
+          completed: isEnrolled && profile?.role === 'student' ? completed : 0,
+          total: total
+        }}
+        onClick={onClick}
+        isEnrolled={isEnrolled}
+        isLoadingEnrollments={isLoadingEnrollments}
+        userRole={profile?.role}
+        onEnroll={onEnroll}
+      />
     );
   };
 
@@ -274,30 +322,44 @@ const CourseList = () => {
       {/* Tabs for enrolled vs all courses */}
       <Tabs defaultValue="all" className="mb-8">
         <TabsList>
-          <TabsTrigger value="enrolled">Enrolled Courses</TabsTrigger>
+          {profile?.role !== 'teacher' && (
+            <TabsTrigger value="enrolled">Enrolled Courses</TabsTrigger>
+          )}
           <TabsTrigger value="all">All Courses</TabsTrigger>
         </TabsList>
-        <TabsContent value="enrolled" className="mt-6">
-          {isLoadingEnrollments ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {renderSkeletons(3)}
-            </div>
-          ) : enrolledCourses.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {enrolledCourses.map(course => generateCourseCard(course))}
-            </div>
-          ) : (
-            <div className="bg-muted/40 rounded-lg p-8 text-center">
-              <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">No enrolled courses found</h3>
-              <p className="text-muted-foreground mb-4">You don't have any enrolled courses that match your search.</p>
-              <Button onClick={() => {
-                setSearchQuery('');
-                setSelectedCategory('All');
-              }}>Clear filters</Button>
-            </div>
-          )}
-        </TabsContent>
+        {profile?.role !== 'teacher' && (
+          <TabsContent value="enrolled" className="mt-6">
+            {isLoadingEnrollments ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {renderSkeletons(3)}
+              </div>
+            ) : enrolledCourses.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {enrolledCourses.map(course => (
+                  <CourseCardWithProgress
+                    key={course.id}
+                    course={course}
+                    isEnrolled={enrolledCourseIds.includes(course.id)}
+                    profile={profile}
+                    onClick={() => handleCourseClick(course.id)}
+                    isLoadingEnrollments={isLoadingEnrollments}
+                    onEnroll={enrollInCourse}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="bg-muted/40 rounded-lg p-8 text-center">
+                <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-xl font-semibold mb-2">No enrolled courses found</h3>
+                <p className="text-muted-foreground mb-4">You don't have any enrolled courses that match your search.</p>
+                <Button onClick={() => {
+                  setSearchQuery('');
+                  setSelectedCategory('All');
+                }}>Clear filters</Button>
+              </div>
+            )}
+          </TabsContent>
+        )}
         <TabsContent value="all" className="mt-6">
           {isLoadingCourses ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -305,7 +367,17 @@ const CourseList = () => {
             </div>
           ) : filteredCourses.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredCourses.map(course => generateCourseCard(course))}
+              {filteredCourses.map(course => (
+                <CourseCardWithProgress
+                  key={course.id}
+                  course={course}
+                  isEnrolled={enrolledCourseIds.includes(course.id)}
+                  profile={profile}
+                  onClick={() => handleCourseClick(course.id)}
+                  isLoadingEnrollments={isLoadingEnrollments}
+                  onEnroll={enrollInCourse}
+                />
+              ))}
             </div>
           ) : (
             <div className="bg-muted/40 rounded-lg p-8 text-center">

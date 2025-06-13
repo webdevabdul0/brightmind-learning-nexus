@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Calendar, Search, Video, Users, MessageSquare, Clock } from 'lucide-react';
+import { Calendar, Search, Video, Users, MessageSquare, Clock, Pencil, Trash } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -55,11 +55,18 @@ const LiveClasses = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'ongoing': return 'bg-green-500';
-      case 'scheduled': return 'bg-blue-500';
-      case 'completed': return 'bg-gray-500';
-      default: return 'bg-gray-500';
+      case 'ongoing': return 'bg-green-500 text-white';
+      case 'scheduled': return 'bg-blue-500 text-white';
+      case 'completed': return 'bg-gray-500 text-white';
+      default: return 'bg-gray-500 text-white';
     }
+  };
+
+  const handleEdit = (session: any) => {
+    alert('Edit live class: ' + session.title);
+  };
+  const handleDelete = (id: string) => {
+    alert('Delete live class: ' + id);
   };
 
   return (
@@ -99,7 +106,7 @@ const LiveClasses = () => {
             {filteredSessions
               .filter(session => getStatus(session) === 'scheduled')
               .map(session => (
-                <LiveClassCard key={session.id} session={session} />
+                <LiveClassCard key={session.id} session={session} handleEdit={handleEdit} handleDelete={handleDelete} />
               ))}
           </div>
         </TabsContent>
@@ -109,7 +116,7 @@ const LiveClasses = () => {
             {filteredSessions
               .filter(session => getStatus(session) === 'ongoing')
               .map(session => (
-                <LiveClassCard key={session.id} session={session} />
+                <LiveClassCard key={session.id} session={session} handleEdit={handleEdit} handleDelete={handleDelete} />
               ))}
           </div>
         </TabsContent>
@@ -119,7 +126,7 @@ const LiveClasses = () => {
             {filteredSessions
               .filter(session => getStatus(session) === 'completed')
               .map(session => (
-                <LiveClassCard key={session.id} session={session} />
+                <LiveClassCard key={session.id} session={session} handleEdit={handleEdit} handleDelete={handleDelete} />
               ))}
           </div>
         </TabsContent>
@@ -130,9 +137,12 @@ const LiveClasses = () => {
 
 interface LiveClassCardProps {
   session: any;
+  handleEdit?: (session: any) => void;
+  handleDelete?: (id: string) => void;
 }
 
-const LiveClassCard = ({ session }: LiveClassCardProps) => {
+const LiveClassCard = ({ session, handleEdit, handleDelete }: LiveClassCardProps) => {
+  const { user, profile } = useAuth();
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('en-US', {
       weekday: 'short',
@@ -146,10 +156,10 @@ const LiveClassCard = ({ session }: LiveClassCardProps) => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'ongoing': return 'bg-green-500';
-      case 'scheduled': return 'bg-blue-500';
-      case 'completed': return 'bg-gray-500';
-      default: return 'bg-gray-500';
+      case 'ongoing': return 'bg-green-500 text-white';
+      case 'scheduled': return 'bg-blue-500 text-white';
+      case 'completed': return 'bg-gray-500 text-white';
+      default: return 'bg-gray-500 text-white';
     }
   };
 
@@ -169,7 +179,7 @@ const LiveClassCard = ({ session }: LiveClassCardProps) => {
               {status.charAt(0).toUpperCase() + status.slice(1)}
             </Badge>
             <CardTitle className="mt-2">{session.title}</CardTitle>
-            <CardDescription>{session.instructor}</CardDescription>
+            <CardDescription>{session.instructor?.name || ''}</CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -190,11 +200,19 @@ const LiveClassCard = ({ session }: LiveClassCardProps) => {
         </div>
       </CardContent>
       <CardFooter>
-        <div className="flex justify-between w-full">
-          <Button variant="outline" size="sm">
-            <Calendar className="h-4 w-4 mr-1" />
-            Remind Me
-          </Button>
+        <div className="flex justify-between w-full items-center">
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm">
+              <Calendar className="h-4 w-4 mr-1" />
+              Remind Me
+            </Button>
+            {profile?.role === 'teacher' && user?.id === session.instructor_id && (
+              <>
+                <Button variant="ghost" size="icon" onClick={() => handleEdit && handleEdit(session)}><Pencil className="h-4 w-4" /></Button>
+                <Button variant="ghost" size="icon" onClick={() => handleDelete && handleDelete(session.id)}><Trash className="h-4 w-4 text-red-500" /></Button>
+              </>
+            )}
+          </div>
           {status === 'ongoing' || status === 'scheduled' ? (
             <Button size="sm" onClick={handleJoin} disabled={!session.meeting_url}>
               {status === 'ongoing' ? (

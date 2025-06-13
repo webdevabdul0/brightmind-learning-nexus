@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { BarChart, BookOpen, Clock, Users, Search, BellRing } from 'lucide-react';
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
+import { BarChart, BookOpen, Clock, Users, Search, BellRing, Pencil, Trash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,26 +12,71 @@ import { BarChart as ReBarChart, Bar, ResponsiveContainer, XAxis, Tooltip } from
 import { supabase, Course, Enrollment } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/hooks/use-toast';
+import { useCourseProgress } from '@/hooks/useCourseProgress';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-// Utility function to generate random study data if none exists
-const generateStudyStatistics = () => {
-  return [
-    { day: 'MON', hours: Math.floor(Math.random() * 5) + 1 },
-    { day: 'TUE', hours: Math.floor(Math.random() * 5) + 1 },
-    { day: 'WED', hours: Math.floor(Math.random() * 5) + 1 },
-    { day: 'THU', hours: Math.floor(Math.random() * 5) + 1 },
-    { day: 'FRI', hours: Math.floor(Math.random() * 5) + 1 },
-    { day: 'SAT', hours: Math.floor(Math.random() * 3) + 0.5 },
-    { day: 'SUN', hours: Math.floor(Math.random() * 4) + 0.5 },
-  ];
+// 1. Child component for live progress on course cards
+const COURSE_COLORS = [
+  'bg-brightmind-purple text-white',
+  'bg-brightmind-blue text-white',
+  'bg-blue-500 text-white',
+  'bg-green-500 text-white',
+  'bg-indigo-500 text-white',
+  'bg-fuchsia-500 text-white',
+  'bg-rose-500 text-white',
+  'bg-orange-500 text-white',
+  'bg-amber-500 text-white',
+  'bg-emerald-500 text-white',
+  'bg-cyan-500 text-white',
+  'bg-violet-500 text-white',
+  'bg-pink-500 text-white',
+  'bg-red-500 text-white',
+  'bg-blue-500 text-white',
+  'bg-green-500 text-white',
+  'bg-indigo-500 text-white',
+];
+function getRandomColor(idx: number) {
+  return COURSE_COLORS[idx % COURSE_COLORS.length];
+}
+const CourseCardWithProgress = ({ course, profile, user, onClick }) => {
+  const { completed, total } = useCourseProgress(course.id, user?.id);
+  // Use a hash of course id and title for more randomness
+  const hash = Math.abs(
+    [...course.id + course.title].reduce((acc, c) => acc + c.charCodeAt(0), 0)
+  );
+  const color = getRandomColor(hash);
+  return (
+    <CourseCard
+      id={course.id}
+      title={course.title}
+      instructor={course.instructor?.name || course.instructor_name || 'Instructor'}
+      color={color}
+      progress={{
+        completed: profile?.role === 'student' ? completed : 0,
+        total: total
+      }}
+      onClick={onClick}
+      isEnrolled={true}
+      userRole={profile?.role}
+    />
+  );
 };
-
-const studyStatistics = generateStudyStatistics();
 
 const Dashboard = () => {
   const { user, profile } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
+  const [viewSubmissionsDialogOpen, setViewSubmissionsDialogOpen] = useState(false);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [grading, setGrading] = useState<{ [submissionId: string]: boolean }>({});
+  const [grades, setGrades] = useState<{ [submissionId: string]: string }>({});
+  const [feedbacks, setFeedbacks] = useState<{ [submissionId: string]: string }>({});
+  const [editAssignmentDialogOpen, setEditAssignmentDialogOpen] = useState(false);
+  const [editLiveClassDialogOpen, setEditLiveClassDialogOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: string, id: string } | null>(null);
+  const [editItem, setEditItem] = useState<any>(null);
+  const queryClient = useQueryClient();
 
   // Teacher-specific queries
   const { data: teacherCourses = [], isLoading: isLoadingTeacherCourses } = useQuery({
@@ -104,51 +149,45 @@ const Dashboard = () => {
     enabled: !!user,
   });
 
-  // Add this query to fetch completed lessons for the student
-  const { data: completedLessonsCount = 0 } = useQuery({
-    queryKey: ['completedLessons', user?.id],
-    queryFn: async () => {
-      if (!user) return 0;
-      const { data, error } = await supabase
-        .from('lesson_progress')
-        .select('id', { count: 'exact' })
-        .eq('student_id', user.id)
-        .eq('completed', true);
-      if (error) return 0;
-      return data.length;
-    },
-    enabled: !!user,
+  // --- OVERALL PROGRESS CALCULATION ---
+  // Only for students
+  const isStudent = profile?.role === 'student';
+
+  // Fetch all lessons and assignments for each enrolled course
+  const courseIds = isStudent && enrollments ? enrollments.map((e: any) => e.course_id) : [];
+
+  // --- NEW: Fetch progress for all courses in parallel ---
+  const courseProgressResults = useQueries({
+    queries: (enrollments || []).map((enrollment: any) => {
+      const courseId = enrollment.course_id;
+      return {
+        queryKey: ['courseProgress', courseId, user?.id],
+        queryFn: async () => {
+          if (!courseId || !user?.id) return { percent: 0, completed: 0, total: 0 };
+          const { data, error } = await supabase
+            .from('course_progress')
+            .select('percent, completed, total')
+            .eq('student_id', user.id)
+            .eq('course_id', courseId)
+            .maybeSingle();
+          if (error || !data) return { percent: 0, completed: 0, total: 0 };
+          return data;
+        },
+        enabled: !!user && !!courseId && isStudent,
+      };
+    }),
+  }) as any;
+
+  // --- NEW: Map courseId to progress for quick lookup ---
+  const courseIdToProgress: Record<string, { percent: number; completed: number; total: number }> = {};
+  (enrollments || []).forEach((enrollment: any, idx: number) => {
+    const courseId = enrollment.course_id;
+    courseIdToProgress[courseId] =
+      courseProgressResults[idx] && courseProgressResults[idx].data !== undefined
+        ? courseProgressResults[idx].data
+        : { percent: 0, completed: 0, total: 0 };
   });
 
-  // Add this query to fetch total learning minutes from completed lessons
-  const { data: totalLearningMinutes = 0 } = useQuery({
-    queryKey: ['totalLearningMinutes', user?.id],
-    queryFn: async () => {
-      if (!user) return 0;
-      // Get all completed lesson ids for the user
-      const { data: progress, error: progressError } = await supabase
-        .from('lesson_progress')
-        .select('lesson_id')
-        .eq('student_id', user.id)
-        .eq('completed', true);
-      if (progressError || !progress) return 0;
-      const lessonIds = progress.map((p: any) => p.lesson_id);
-      if (!lessonIds.length) return 0;
-      // Get the sum of durations for these lessons
-      const { data: lessons, error: lessonsError } = await supabase
-        .from('course_lessons')
-        .select('duration')
-        .in('id', lessonIds);
-      if (lessonsError || !lessons) return 0;
-      const totalMinutes = lessons.reduce((sum: number, l: any) => sum + (l.duration || 0), 0);
-      return totalMinutes;
-    },
-    enabled: !!user,
-  });
-
-  // Calculate total learning hours
-  const totalHours = studyStatistics.reduce((sum, day) => sum + day.hours, 0);
-  
   // Format total hours
   const formatHours = (hours: number) => {
     const h = Math.floor(hours);
@@ -156,12 +195,82 @@ const Dashboard = () => {
     return `${h}h ${m}m`;
   };
 
+  // Calculate average progress across all enrolled courses
+  const courseProgressValues = isStudent && courseProgressResults.length > 0
+    ? courseProgressResults.map((result: any) => (result.data !== undefined ? result.data.percent : 0))
+    : [];
+  const averageProgress = courseProgressValues.length > 0
+    ? Math.round(courseProgressValues.reduce((acc: number, val: number) => acc + val, 0) / courseProgressValues.length)
+    : 0;
+
+  // Calculate total completed courses
+  const [totalCompleted, totalItems] = (() => {
+    let completed = 0;
+    let items = 0;
+    if (isStudent && enrollments && enrollments.length > 0) {
+      enrollments.forEach((enrollment: any, idx: number) => {
+        if (courseProgressResults[idx] && courseProgressResults[idx].data !== undefined) {
+          if (courseProgressResults[idx].data.percent === 100) completed += 1;
+          items += 1;
+        }
+      });
+    }
+    return [completed, items];
+  })();
+
+  // Calculate number of courses in progress and completed
+  const numCompleted = isStudent && enrollments && enrollments.length > 0
+    ? enrollments.reduce((acc: number, enrollment: any, idx: number) => {
+        const progress = courseProgressResults[idx]?.data;
+        if (progress && progress.percent === 100) return acc + 1;
+        return acc;
+      }, 0)
+    : 0;
+  const numInProgress = isStudent && enrollments && enrollments.length > 0
+    ? enrollments.reduce((acc: number, enrollment: any, idx: number) => {
+        const progress = courseProgressResults[idx]?.data;
+        if (progress && progress.percent < 100) return acc + 1;
+        return acc;
+      }, 0)
+    : 0;
+
   const handleCourseClick = (courseId: string) => {
     navigate(`/courses/${courseId}`);
   };
 
   const handleViewNotifications = () => {
     navigate('/notifications');
+  };
+
+  const fetchSubmissions = async (assignmentId: string) => {
+    const { data, error } = await supabase
+      .from('assignment_submissions')
+      .select('id, student_id, file_url, grade, feedback, status, submitted_at, student:student_id(name, email)')
+      .eq('assignment_id', assignmentId);
+    if (!error) setSubmissions(data || []);
+  };
+
+  const handleViewSubmissions = async (assignmentId: string) => {
+    setSelectedAssignmentId(assignmentId);
+    setViewSubmissionsDialogOpen(true);
+    await fetchSubmissions(assignmentId);
+  };
+
+  const handleGrade = async (submissionId: string, studentId: string) => {
+    setGrading(g => ({ ...g, [submissionId]: true }));
+    const grade = Number(grades[submissionId]);
+    const feedback = feedbacks[submissionId] || '';
+    const { error } = await supabase
+      .from('assignment_submissions')
+      .update({ grade, feedback, status: 'completed' })
+      .eq('id', submissionId);
+    setGrading(g => ({ ...g, [submissionId]: false }));
+    if (!error) {
+      toast({ title: 'Graded', description: 'Grade submitted.' });
+      await fetchSubmissions(selectedAssignmentId!);
+    } else {
+      toast({ title: 'Failed to grade', description: error.message, variant: 'destructive' });
+    }
   };
 
   const renderCourses = () => {
@@ -198,37 +307,176 @@ const Dashboard = () => {
                (course.instructor_name && course.instructor_name.toLowerCase().includes(searchQuery.toLowerCase()));
       })
       .slice(0, 3)
-      .map((enrollment: any) => {
+      .map((enrollment: any, idx: number) => {
         const course = enrollment.course;
         
-        // Generate a color based on the category or use default colors
-        const colors = [
-          'bg-brightmind-lightpurple text-brightmind-purple',
-          'bg-brightmind-lightblue text-brightmind-blue',
-          'bg-blue-100 text-blue-600',
-          'bg-green-100 text-green-600',
-          'bg-amber-100 text-amber-600',
-          'bg-indigo-100 text-indigo-600'
-        ];
+        // Use a hash of course id and title for more randomness
+        const hash = Math.abs(
+          [...course.id + course.title].reduce((acc, c) => acc + c.charCodeAt(0), 0)
+        );
+        const color = getRandomColor(hash);
         
-        const colorIndex = Math.abs(course.title.charCodeAt(0) + course.title.charCodeAt(course.title.length - 1)) % colors.length;
-        
+        // Get progress from courseIdToProgress
+        const progress = courseIdToProgress[course.id] || { percent: 0, completed: 0, total: 0 };
         return (
-          <CourseCard 
+          <CourseCardWithProgress
             key={course.id}
-            id={course.id}
-            title={course.title}
-            instructor={course.instructor_name || 'Instructor'}
-            color={colors[colorIndex]}
-            progress={{ 
-              completed: enrollment.progress || 0, 
-              total: 100 
-            }}
+            course={course}
+            profile={profile}
+            user={user}
             onClick={() => handleCourseClick(course.id)}
           />
         );
       });
   };
+
+  // 2. Fetch real study stats and community score
+  const { data: studyStatsRaw, isLoading: isLoadingStats } = useQuery({
+    queryKey: ['studentStats', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      // Get all completed lessons for this user
+      const { data: completedLessons } = await supabase
+        .from('lesson_progress')
+        .select('lesson_id, completed_at')
+        .eq('student_id', user.id)
+        .eq('completed', true);
+      if (!completedLessons) return [];
+      // Get lesson durations
+      const lessonIds = completedLessons.map(l => l.lesson_id);
+      const { data: lessons } = await supabase
+        .from('course_lessons')
+        .select('id, duration')
+        .in('id', lessonIds);
+      // Map lessonId to duration
+      const lessonDurationMap = {};
+      (lessons || []).forEach(l => { lessonDurationMap[l.id] = l.duration || 0; });
+      // Aggregate by day
+      const statsByDay = {};
+      completedLessons.forEach(l => {
+        const date = l.completed_at ? l.completed_at.split('T')[0] : 'unknown';
+        if (!statsByDay[date]) statsByDay[date] = { hours: 0, lessons: 0 };
+        statsByDay[date].hours += (lessonDurationMap[l.lesson_id] || 0) / 60;
+        statsByDay[date].lessons += 1;
+      });
+      // Fetch assignments completed
+      const { data: completedAssignments } = await supabase
+        .from('assignment_submissions')
+        .select('id, submitted_at')
+        .eq('student_id', user.id)
+        .eq('status', 'completed');
+      // Aggregate assignment completions by day
+      (completedAssignments || []).forEach(a => {
+        const date = a.submitted_at ? a.submitted_at.split('T')[0] : 'unknown';
+        if (!statsByDay[date]) statsByDay[date] = { hours: 0, lessons: 0, assignments: 0 };
+        statsByDay[date].assignments = (statsByDay[date].assignments || 0) + 1;
+      });
+      // Build week/month arrays
+      const today = new Date();
+      const week = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        const key = d.toISOString().split('T')[0];
+        week.push({
+          day: d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase(),
+          hours: +(statsByDay[key]?.hours || 0).toFixed(2),
+          lessons: statsByDay[key]?.lessons || 0,
+          assignments: statsByDay[key]?.assignments || 0
+        });
+      }
+      // For month, last 30 days
+      const month = [];
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        const key = d.toISOString().split('T')[0];
+        month.push({
+          day: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          hours: +(statsByDay[key]?.hours || 0).toFixed(2),
+          lessons: statsByDay[key]?.lessons || 0,
+          assignments: statsByDay[key]?.assignments || 0
+        });
+      }
+      // Calculate total hours
+      const totalHours = Object.values(statsByDay).reduce((sum, s) => sum + (s.hours || 0), 0);
+      // Calculate community score (cool logic)
+      let communityScore = 0;
+      Object.values(statsByDay).forEach((s: any) => {
+        communityScore += (s.lessons || 0) * 10;
+        communityScore += (s.assignments || 0) * 20;
+        if ((s.hours || 0) > 1) communityScore += 5;
+      });
+      return { week, month, totalHours, communityScore };
+    },
+    enabled: !!user
+  });
+
+  // Ensure studyStats is always an object with the right shape
+  const studyStats = studyStatsRaw && !Array.isArray(studyStatsRaw)
+    ? studyStatsRaw
+    : { week: [], month: [], totalHours: 0, communityScore: 0 };
+
+  // Assignment update/delete mutations
+  const updateAssignmentMutation = useMutation({
+    mutationFn: async (assignment) => {
+      const { error } = await supabase.from('assignments').update(assignment).eq('id', assignment.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teacherAssignments', user?.id] });
+      setEditAssignmentDialogOpen(false);
+      setEditItem(null);
+      toast({ title: 'Assignment updated' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to update assignment', description: error.message, variant: 'destructive' });
+    }
+  });
+  const deleteAssignmentMutation = useMutation({
+    mutationFn: async (id) => {
+      const { error } = await supabase.from('assignments').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teacherAssignments', user?.id] });
+      setDeleteConfirm(null);
+      toast({ title: 'Assignment deleted' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to delete assignment', description: error.message, variant: 'destructive' });
+    }
+  });
+  // Live class update/delete mutations
+  const updateLiveClassMutation = useMutation({
+    mutationFn: async (liveClass) => {
+      const { error } = await supabase.from('live_classes').update(liveClass).eq('id', liveClass.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teacherLiveClasses', user?.id] });
+      setEditLiveClassDialogOpen(false);
+      setEditItem(null);
+      toast({ title: 'Live class updated' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to update live class', description: error.message, variant: 'destructive' });
+    }
+  });
+  const deleteLiveClassMutation = useMutation({
+    mutationFn: async (id) => {
+      const { error } = await supabase.from('live_classes').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teacherLiveClasses', user?.id] });
+      setDeleteConfirm(null);
+      toast({ title: 'Live class deleted' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to delete live class', description: error.message, variant: 'destructive' });
+    }
+  });
 
   if (profile?.role === 'teacher') {
     return (
@@ -259,17 +507,29 @@ const Dashboard = () => {
               <p className="text-muted-foreground mb-4">You have not registered as an instructor for any course.</p>
             </div>
           ) : (
-            teacherCourses.map((course: any) => (
-              <CourseCard 
-                key={course.id}
-                id={course.id}
-                title={course.title}
-                instructor={profile?.name || 'You'}
-                color={'bg-brightmind-lightpurple text-brightmind-purple'}
-                progress={{ completed: 0, total: 100 }}
-                onClick={() => navigate(`/courses/${course.id}`)}
-              />
-            ))
+            teacherCourses.map((course: any) => {
+              // Vibrant color palette
+              const colors = [
+                'bg-brightmind-purple text-white',
+                'bg-brightmind-blue text-white',
+                'bg-blue-500 text-white',
+                'bg-green-500 text-white',
+                'bg-amber-500 text-white',
+                'bg-indigo-500 text-white'
+              ];
+              const colorIndex = Math.abs(course.title.charCodeAt(0) + course.title.charCodeAt(course.title.length - 1)) % colors.length;
+              return (
+                <CourseCard 
+                  key={course.id}
+                  id={course.id}
+                  title={course.title}
+                  instructor={course.instructor?.name || profile?.name || 'Teacher'}
+                  color={colors[colorIndex]}
+                  progress={{ completed: 0, total: 100 }}
+                  onClick={() => navigate(`/courses/${course.id}`)}
+                />
+              );
+            })
           )}
         </div>
         <h2 className="text-xl font-semibold mb-4">ASSIGNMENTS</h2>
@@ -289,14 +549,60 @@ const Dashboard = () => {
             </div>
           ) : (
             teacherAssignments.map((assignment: any) => (
-              <div key={assignment.id} className="rounded-xl p-6 bg-white shadow">
-                <div className="font-semibold text-lg mb-2">{assignment.title}</div>
+              <div key={assignment.id} className="rounded-xl p-6 bg-white shadow flex flex-col gap-2">
+                <div className="font-semibold text-lg mb-2 flex justify-between items-center">
+                  <span>{assignment.title}</span>
+                  <span className="flex gap-2">
+                    <Button variant="ghost" size="icon" onClick={() => { setEditAssignmentDialogOpen(true); setEditItem(assignment); }}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm({ type: 'assignment', id: assignment.id })}><Trash className="h-4 w-4 text-red-500" /></Button>
+                  </span>
+                </div>
                 <div className="text-sm text-gray-500 mb-2">Due: {assignment.due_date ? new Date(assignment.due_date).toLocaleDateString() : 'N/A'}</div>
-                <Button size="sm" onClick={() => navigate(`/courses/${assignment.course_id}`)}>Go to Course</Button>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => navigate(`/courses/${assignment.course_id}`)}>Go to Course</Button>
+                  <Button size="sm" variant="outline" onClick={() => handleViewSubmissions(assignment.id)}>View Submissions</Button>
+                </div>
               </div>
             ))
           )}
         </div>
+        <Dialog open={viewSubmissionsDialogOpen} onOpenChange={setViewSubmissionsDialogOpen}>
+          <DialogContent className="max-w-2xl w-[90vw]">
+            <DialogHeader><DialogTitle>Assignment Submissions</DialogTitle></DialogHeader>
+            {submissions.length === 0 ? (
+              <div>No submissions yet.</div>
+            ) : (
+              <ul className="space-y-4">
+                {submissions.map(sub => (
+                  <li key={sub.id} className="flex items-center gap-4 border-b pb-2">
+                    <div className="flex-1">
+                      <div className="font-medium">{sub.student?.name || sub.student_id}</div>
+                      <div className="text-xs text-muted-foreground">{sub.student?.email}</div>
+                      <a href={sub.file_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-sm">Download PDF</a>
+                      <div className="text-xs mt-1">Submitted: {new Date(sub.submitted_at).toLocaleString()}</div>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Grade"
+                      className="border rounded px-2 py-1 w-20"
+                      value={grades[sub.id] || sub.grade || ''}
+                      onChange={e => setGrades(g => ({ ...g, [sub.id]: e.target.value }))}
+                      disabled={grading[sub.id]}
+                    />
+                    <textarea
+                      placeholder="Remarks/Feedback"
+                      className="border rounded px-2 py-1 w-40"
+                      value={feedbacks[sub.id] || sub.feedback || ''}
+                      onChange={e => setFeedbacks(f => ({ ...f, [sub.id]: e.target.value }))}
+                      disabled={grading[sub.id]}
+                    />
+                    <Button size="sm" onClick={() => handleGrade(sub.id, sub.student_id)} disabled={grading[sub.id]}>Mark as Graded</Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DialogContent>
+        </Dialog>
         <h2 className="text-xl font-semibold mb-4">SCHEDULED LIVE CLASSES</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           {isLoadingTeacherLiveClasses ? (
@@ -314,15 +620,68 @@ const Dashboard = () => {
             </div>
           ) : (
             teacherLiveClasses.map((liveClass: any) => (
-              <div key={liveClass.id} className="rounded-xl p-6 bg-white shadow">
-                <div className="font-semibold text-lg mb-2">{liveClass.title}</div>
+              <div key={liveClass.id} className="rounded-xl p-6 bg-white shadow flex flex-col gap-2">
+                <div className="font-semibold text-lg mb-2 flex justify-between items-center">
+                  <span>{liveClass.title}</span>
+                  <span className="flex gap-2">
+                    <Button variant="ghost" size="icon" onClick={() => { setEditLiveClassDialogOpen(true); setEditItem(liveClass); }}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm({ type: 'live_class', id: liveClass.id })}><Trash className="h-4 w-4 text-red-500" /></Button>
+                  </span>
+                </div>
                 <div className="text-sm text-gray-500 mb-2">Start: {liveClass.start_time ? new Date(liveClass.start_time).toLocaleString() : 'N/A'}</div>
                 <div className="text-sm text-gray-500 mb-2">Duration: {liveClass.duration} min</div>
-                <Button size="sm" onClick={() => navigate(`/courses/${liveClass.course_id}`)}>Go to Course</Button>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => navigate(`/courses/${liveClass.course_id}`)}>Go to Course</Button>
+                </div>
               </div>
             ))
           )}
         </div>
+        <Dialog open={editAssignmentDialogOpen} onOpenChange={setEditAssignmentDialogOpen}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Edit Assignment</DialogTitle></DialogHeader>
+            {editItem && (
+              <>
+                <Input placeholder="Assignment Title" value={editItem.title} onChange={e => setEditItem({ ...editItem, title: e.target.value })} />
+                <Input type="date" className="mt-2" value={editItem.due_date} onChange={e => setEditItem({ ...editItem, due_date: e.target.value })} />
+                <Button className="mt-4 w-full" onClick={() => { if (editItem) updateAssignmentMutation.mutate(editItem); }}>Save</Button>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+        <Dialog open={editLiveClassDialogOpen} onOpenChange={setEditLiveClassDialogOpen}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Edit Live Class</DialogTitle></DialogHeader>
+            {editItem && (
+              <>
+                <Input placeholder="Title" value={editItem.title} onChange={e => setEditItem({ ...editItem, title: e.target.value })} />
+                <Input type="datetime-local" className="mt-2" value={editItem.start_time} onChange={e => setEditItem({ ...editItem, start_time: e.target.value })} />
+                <Input type="number" className="mt-2" placeholder="Duration (minutes)" value={editItem.duration} onChange={e => setEditItem({ ...editItem, duration: e.target.value ? parseInt(e.target.value, 10) : null })} />
+                <Input className="mt-2" placeholder="Meeting URL" value={editItem.meeting_url} onChange={e => setEditItem({ ...editItem, meeting_url: e.target.value })} />
+                <Button className="mt-4 w-full" onClick={() => { if (editItem) updateLiveClassMutation.mutate(editItem); }}>Save</Button>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+        <Dialog open={deleteConfirm !== null} onOpenChange={() => setDeleteConfirm(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Confirm Deletion</DialogTitle></DialogHeader>
+            <p>Are you sure you want to delete this {deleteConfirm?.type === 'assignment' ? 'assignment' : 'live class'}?</p>
+            <div className="flex gap-2">
+              <Button variant="destructive" onClick={() => {
+                if (deleteConfirm) {
+                  if (deleteConfirm.type === 'assignment') {
+                    deleteAssignmentMutation.mutate(deleteConfirm.id);
+                  } else if (deleteConfirm.type === 'live_class') {
+                    deleteLiveClassMutation.mutate(deleteConfirm.id);
+                  }
+                  setDeleteConfirm(null);
+                }
+              }}>Delete</Button>
+              <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -358,22 +717,22 @@ const Dashboard = () => {
         <StatCard 
           icon={<BookOpen className="h-6 w-6 text-brightmind-blue" />}
           label="Courses in progress"
-          value={enrollments?.length?.toString() || "0"}
+          value={isStudent ? numInProgress.toString() : (enrollments?.length?.toString() || "0")}
         />
         <StatCard 
           icon={<BookOpen className="h-6 w-6 text-brightmind-purple" />}
-          label="Lessons Completed"
-          value={completedLessonsCount.toString()}
+          label="Courses Completed"
+          value={isStudent ? numCompleted.toString() : '0'}
         />
         <StatCard 
           icon={<Clock className="h-6 w-6 text-brightmind-blue" />}
           label="Hours Learning"
-          value={formatHours(totalLearningMinutes / 60)}
+          value={formatHours(Number(studyStats.totalHours) || 0)}
         />
         <StatCard 
           icon={<Users className="h-6 w-6 text-brightmind-purple" />}
           label="Community score"
-          value="240"
+          value={studyStats.communityScore || 0}
         />
       </div>
 
@@ -391,7 +750,7 @@ const Dashboard = () => {
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <ReBarChart data={studyStatistics}>
+              <ReBarChart data={studyStats.week}>
                 <XAxis dataKey="day" axisLine={false} tickLine={false} />
                 <Tooltip />
                 <Bar
@@ -419,8 +778,7 @@ const Dashboard = () => {
                   stroke="#f3f4f6"
                   strokeWidth="10"
                 />
-                
-                {/* Progress circle - Courses (45%) */}
+                {/* Progress circle - Courses */}
                 <circle
                   cx="50"
                   cy="50"
@@ -429,45 +787,50 @@ const Dashboard = () => {
                   stroke="#0EA5E9"
                   strokeWidth="10"
                   strokeDasharray="283"
-                  strokeDashoffset="155"
-                  strokeLinecap="round"
-                  transform="rotate(-90 50 50)"
-                />
-                
-                {/* Progress circle - Prototypes (80%) */}
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="35"
-                  fill="none"
-                  stroke="#9b87f5"
-                  strokeWidth="10"
-                  strokeDasharray="220"
-                  strokeDashoffset="44"
+                  strokeDashoffset={`$${283 - (averageProgress / 100) * 283}`}
                   strokeLinecap="round"
                   transform="rotate(-90 50 50)"
                 />
               </svg>
-              
               <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
-                <div className="text-3xl font-bold">45%</div>
+                <div className="text-3xl font-bold">{averageProgress}%</div>
                 <div className="text-sm text-gray-500">overall</div>
               </div>
             </div>
           </div>
-          
           <div className="mt-6 flex justify-center gap-8">
             <div className="flex items-center">
               <div className="w-3 h-3 rounded-full bg-brightmind-blue mr-2"></div>
               <span className="text-sm">Courses</span>
             </div>
-            <div className="flex items-center">
-              <div className="w-3 h-3 rounded-full bg-brightmind-purple mr-2"></div>
-              <span className="text-sm">Prototypes</span>
-            </div>
           </div>
         </div>
       </div>
+
+      {/* Completed Courses */}
+      {isStudent && totalCompleted > 0 && (
+        <>
+          <h2 className="text-xl font-semibold mb-4">COMPLETED COURSES</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            {(enrollments || []).map((enrollment: any, idx: number) => {
+              const course = enrollment.course;
+              const progress = courseIdToProgress[course.id] || { percent: 0, completed: 0, total: 0 };
+              if (progress.percent === 100) {
+                return (
+                  <CourseCardWithProgress
+                    key={course.id}
+                    course={course}
+                    profile={profile}
+                    user={user}
+                    onClick={() => handleCourseClick(course.id)}
+                  />
+                );
+              }
+              return null;
+            })}
+          </div>
+        </>
+      )}
 
       {/* My Courses */}
       <h2 className="text-xl font-semibold mb-4">MY COURSES</h2>

@@ -23,7 +23,6 @@ import AISuggestions from "@/pages/ai/AISuggestions";
 import AssignmentList from "@/pages/assignments/AssignmentList";
 import Profile from "@/pages/profile/Profile";
 import Notifications from "@/pages/notifications/Notifications";
-import Performance from "@/pages/performance/Performance";
 import Settings from "@/pages/settings/Settings";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 
@@ -31,6 +30,13 @@ import AdminDashboard from "@/pages/admin/AdminDashboard";
 import NotFound from "@/pages/NotFound";
 import RequireAuth from "@/components/auth/RequireAuth";
 import Unauthorized from "@/pages/Unauthorized";
+
+import QuizList from '@/pages/quizzes/QuizList';
+import QuizCreate from '@/pages/quizzes/QuizCreate';
+import QuizEdit from '@/pages/quizzes/QuizEdit';
+import QuizAttempt from '@/pages/quizzes/QuizAttempt';
+import QuizGrade from '@/pages/quizzes/QuizGrade';
+import QuizView from '@/pages/quizzes/QuizView';
 
 const queryClient = new QueryClient();
 
@@ -124,14 +130,6 @@ const App = () => (
             </RequireAuth>
           } />
           
-          <Route path="/performance" element={
-            <RequireAuth>
-              <SidebarLayout>
-                <Performance />
-              </SidebarLayout>
-            </RequireAuth>
-          } />
-          
           <Route path="/settings" element={
             <RequireAuth>
               <SidebarLayout>
@@ -144,6 +142,50 @@ const App = () => (
             <RequireAuth>
               <SidebarLayout>
                 <AISuggestions />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          
+          {/* Quiz routes */}
+          <Route path="/quizzes" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <QuizList />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          <Route path="/quizzes/create" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <QuizCreate />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          <Route path="/quizzes/:id/edit" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <QuizEdit />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          <Route path="/quizzes/:id/attempt" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <QuizAttempt />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          <Route path="/quizzes/:id/grade" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <QuizGrade />
+              </SidebarLayout>
+            </RequireAuth>
+          } />
+          <Route path="/quizzes/:id" element={
+            <RequireAuth>
+              <SidebarLayout>
+                <QuizView />
               </SidebarLayout>
             </RequireAuth>
           } />

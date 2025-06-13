@@ -41,6 +41,8 @@ const AdminDashboard = () => {
     level: '',
     image_url: ''
   });
+  const [editCourseOpen, setEditCourseOpen] = useState(false);
+  const [editCourseForm, setEditCourseForm] = useState<any>(null);
 
   const queryClient = useQueryClient();
 
@@ -161,6 +163,47 @@ const AdminDashboard = () => {
     },
     onError: (error: any) => {
       toast({ title: 'Error creating course', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  const updateCourseMutation = useMutation({
+    mutationFn: async (course: any) => {
+      // Only send valid fields for the courses table
+      const {
+        id,
+        title,
+        description,
+        instructor_id,
+        category,
+        image_url,
+        duration,
+        level,
+        price
+      } = course;
+      const { error } = await supabase
+        .from('courses')
+        .update({
+          title,
+          description,
+          instructor_id,
+          category,
+          image_url,
+          duration,
+          level,
+          price: price ? Number(price) : null
+        })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminCourses'] });
+      setEditCourseOpen(false);
+      setEditCourseForm(null);
+      toast({ title: 'Course updated', description: 'The course has been updated successfully.' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error updating course', description: error.message, variant: 'destructive' });
+      console.log('Update course error:', error);
     }
   });
 
@@ -374,7 +417,10 @@ const AdminDashboard = () => {
                           <Badge variant="default">
                             Course
                           </Badge>
-                          <Button variant="outline" size="sm">Edit</Button>
+                          <Button variant="outline" size="sm" onClick={() => {
+                            setEditCourseForm({ ...course });
+                            setEditCourseOpen(true);
+                          }}>Edit</Button>
                         </div>
                       </div>
                       <div className="space-y-2">
@@ -594,6 +640,59 @@ const AdminDashboard = () => {
               <Button type="submit" disabled={createCourseMutation.isPending}>Create</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editCourseOpen} onOpenChange={setEditCourseOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Course</DialogTitle>
+          </DialogHeader>
+          {editCourseForm && (
+            <form className="space-y-4">
+              <div>
+                <Label>Title</Label>
+                <Input name="title" value={editCourseForm.title} onChange={e => setEditCourseForm({ ...editCourseForm, title: e.target.value })} required />
+              </div>
+              <div>
+                <Label>Description</Label>
+                <Input name="description" value={editCourseForm.description} onChange={e => setEditCourseForm({ ...editCourseForm, description: e.target.value })} required />
+              </div>
+              <div>
+                <Label>Category</Label>
+                <Input name="category" value={editCourseForm.category} onChange={e => setEditCourseForm({ ...editCourseForm, category: e.target.value })} required />
+              </div>
+              <div>
+                <Label>Instructor</Label>
+                <select name="instructor_id" value={editCourseForm.instructor_id} onChange={e => setEditCourseForm({ ...editCourseForm, instructor_id: e.target.value })} required className="w-full border rounded p-2">
+                  <option value="">Select Instructor</option>
+                  {teachers.map((t: any) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label>Price</Label>
+                <Input name="price" type="number" value={editCourseForm.price} onChange={e => setEditCourseForm({ ...editCourseForm, price: e.target.value })} />
+              </div>
+              <div>
+                <Label>Duration</Label>
+                <Input name="duration" value={editCourseForm.duration} onChange={e => setEditCourseForm({ ...editCourseForm, duration: e.target.value })} />
+              </div>
+              <div>
+                <Label>Level</Label>
+                <Input name="level" value={editCourseForm.level} onChange={e => setEditCourseForm({ ...editCourseForm, level: e.target.value })} />
+              </div>
+              <div>
+                <Label>Image URL</Label>
+                <Input name="image_url" value={editCourseForm.image_url} onChange={e => setEditCourseForm({ ...editCourseForm, image_url: e.target.value })} />
+              </div>
+              <DialogFooter>
+                <Button type="button" onClick={() => setEditCourseOpen(false)}>Cancel</Button>
+                <Button type="button" onClick={() => updateCourseMutation.mutate(editCourseForm)} disabled={updateCourseMutation.isPending}>Save</Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>

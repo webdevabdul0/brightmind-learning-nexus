@@ -19,13 +19,22 @@ const Settings = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
+  type UserSettings = {
+    theme: string;
+    email_notifications: boolean;
+    browser_notifications: boolean;
+    language: string;
+    assignment_reminders?: boolean;
+    class_reminders?: boolean;
+  };
+  
   // Only allow the user to view/edit their settings
   if (!user || user.id !== profile?.id) {
     return <div className="p-8 text-center text-red-600 font-bold">Unauthorized</div>;
   }
   
   // Fetch user settings
-  const { data: userSettings, isLoading: isLoadingSettings } = useQuery({
+  const { data: userSettings, isLoading: isLoadingSettings } = useQuery<UserSettings | null>({
     queryKey: ['userSettings', user?.id],
     queryFn: async () => {
       if (!user) return null;
@@ -45,11 +54,13 @@ const Settings = () => {
         throw error;
       }
 
-      return data || {
+      return (data as UserSettings) || {
         theme: 'light',
         email_notifications: true,
         browser_notifications: true,
-        language: 'english'
+        language: 'english',
+        assignment_reminders: true,
+        class_reminders: true
       };
     },
     enabled: !!user
@@ -69,7 +80,6 @@ const Settings = () => {
   
   // Appearance settings
   const [theme, setTheme] = useState('light');
-  const [fontSize, setFontSize] = useState('medium');
   const [language, setLanguage] = useState('english');
   
   // Account settings
@@ -84,6 +94,8 @@ const Settings = () => {
       setEmailNotifications(userSettings.email_notifications || true);
       setBrowserNotifications(userSettings.browser_notifications || true);
       setLanguage(userSettings.language || 'english');
+      setAssignmentReminders(userSettings.assignment_reminders ?? true);
+      setClassReminders(userSettings.class_reminders ?? true);
     }
   }, [userSettings]);
 
@@ -131,7 +143,9 @@ const Settings = () => {
         .from('user_settings')
         .update({
           email_notifications: emailNotifications,
-          browser_notifications: browserNotifications
+          browser_notifications: browserNotifications,
+          assignment_reminders: assignmentReminders,
+          class_reminders: classReminders
         })
         .eq('id', user.id);
 
@@ -454,21 +468,6 @@ const Settings = () => {
                     </div>
                   </RadioGroup>
                 </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="font-size">Font Size</Label>
-                  <Select value={fontSize} onValueChange={setFontSize}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select font size" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="small">Small</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="large">Large</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
                 <div className="space-y-2">
                   <Label htmlFor="language">Language</Label>
                   <Select value={language} onValueChange={setLanguage}>
@@ -477,15 +476,10 @@ const Settings = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="english">English</SelectItem>
-                      <SelectItem value="spanish">Spanish</SelectItem>
-                      <SelectItem value="french">French</SelectItem>
-                      <SelectItem value="german">German</SelectItem>
-                      <SelectItem value="chinese">Chinese</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-              
               <Button 
                 onClick={handleAppearanceSettingsUpdate}
                 disabled={updateAppearanceSettingsMutation.isPending}

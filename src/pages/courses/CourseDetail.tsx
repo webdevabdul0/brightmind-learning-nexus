@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
@@ -12,7 +12,9 @@ import {
   PlayCircle,
   Download,
   Calendar,
-  Loader2
+  Loader2,
+  Pencil,
+  Trash
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -27,6 +29,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
+import { useCourseProgress } from '@/hooks/useCourseProgress';
+import { AttendanceTab, StudentAttendanceView } from '@/components/AttendanceTab';
 
 const CourseDetail = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -46,18 +50,34 @@ const CourseDetail = () => {
   const [newLessonType, setNewLessonType] = useState('video');
   const [newLessonModuleId, setNewLessonModuleId] = useState('');
   const [newLessonVideoUrl, setNewLessonVideoUrl] = useState('');
-  const [newAssignmentTitle, setNewAssignmentTitle] = useState('');
-  const [newAssignmentDueDate, setNewAssignmentDueDate] = useState('');
-  const [students, setStudents] = useState([]);
-  const [scheduleLiveClassDialogOpen, setScheduleLiveClassDialogOpen] = useState(false);
-  const [liveClassTitle, setLiveClassTitle] = useState('');
-  const [liveClassStartTime, setLiveClassStartTime] = useState('');
-  const [liveClassDuration, setLiveClassDuration] = useState('');
-  const [liveClassMeetingUrl, setLiveClassMeetingUrl] = useState('');
   const [newLessonContent, setNewLessonContent] = useState('');
   const [newLessonDuration, setNewLessonDuration] = useState('');
   const [textLessonDialogOpen, setTextLessonDialogOpen] = useState(false);
   const [currentTextLessonContent, setCurrentTextLessonContent] = useState('');
+  const [newAssignmentQuestionFile, setNewAssignmentQuestionFile] = useState<File | null>(null);
+  const [newAssignmentQuestionFileName, setNewAssignmentQuestionFileName] = useState('');
+  const [editModuleDialogOpen, setEditModuleDialogOpen] = useState(false);
+  const [editLessonDialogOpen, setEditLessonDialogOpen] = useState(false);
+  const [editAssignmentDialogOpen, setEditAssignmentDialogOpen] = useState(false);
+  const [editLiveClassDialogOpen, setEditLiveClassDialogOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: string, id: string } | null>(null);
+  const [editItem, setEditItem] = useState<any>(null);
+  const [newLessonPdfFile, setNewLessonPdfFile] = useState<File | null>(null);
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+  const [currentPdfUrl, setCurrentPdfUrl] = useState('');
+  const [newAssignmentTitle, setNewAssignmentTitle] = useState('');
+  const [newAssignmentDueDate, setNewAssignmentDueDate] = useState('');
+  const [liveClassTitle, setLiveClassTitle] = useState('');
+  const [liveClassStartTime, setLiveClassStartTime] = useState('');
+  const [liveClassDuration, setLiveClassDuration] = useState('');
+  const [liveClassMeetingUrl, setLiveClassMeetingUrl] = useState('');
+  const [students, setStudents] = useState([]);
+  const [scheduleLiveClassDialogOpen, setScheduleLiveClassDialogOpen] = useState(false);
+  const [discussionMessages, setDiscussionMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const discussionInputRef = useRef(null);
+  const [currentPdfLessonId, setCurrentPdfLessonId] = useState<string | null>(null);
 
   // Fetch course details
   const { data: course, isLoading: isLoadingCourse } = useQuery({
@@ -182,33 +202,29 @@ const CourseDetail = () => {
     enabled: !!courseId && !!user
   });
 
-  // Fetch lesson progress for this user
-  const { data: lessonProgress = {}, isLoading: isLoadingProgress } = useQuery({
-    queryKey: ['lessonProgress', courseId, user?.id],
+  // Fetch per-course progress for this user
+  const { percent, completed, total } = useCourseProgress(courseId || '', user?.id);
+
+  // Fetch completed lesson IDs for this course and user
+  const { data: completedLessonIds = [] } = useQuery({
+    queryKey: ['completedLessonIds', courseId, user?.id],
     queryFn: async () => {
-      if (!courseId || !user) return {};
-
-      const { data, error } = await supabase
+      if (!courseId || !user) return [];
+      // Get all lesson IDs for the course
+      const { data: courseLessons } = await supabase
+        .from('course_lessons')
+        .select('id')
+        .eq('course_id', courseId);
+      const lessonIds = courseLessons ? courseLessons.map((l: any) => l.id) : [];
+      // Get all completed lessons for the student
+      const { data: completedLessons } = await supabase
         .from('lesson_progress')
-        .select('*')
-        .eq('student_id', user.id);
-
-      if (error) {
-        toast({
-          title: "Error fetching lesson progress",
-          description: error.message,
-          variant: "destructive"
-        });
-        throw error;
-      }
-
-      // Convert to map for easier lookup
-      const progressMap: Record<string, boolean> = {};
-      data.forEach(item => {
-        progressMap[item.lesson_id] = item.completed;
-      });
-      
-      return progressMap;
+        .select('lesson_id')
+        .eq('student_id', user.id)
+        .eq('completed', true);
+      const completedLessonIds = completedLessons ? completedLessons.map((l: any) => l.lesson_id) : [];
+      // Return only those completed that are in this course
+      return lessonIds.filter((id: any) => completedLessonIds.includes(id));
     },
     enabled: !!courseId && !!user
   });
@@ -250,7 +266,6 @@ const CourseDetail = () => {
   const markLessonCompletedMutation = useMutation({
     mutationFn: async (lessonId: string) => {
       if (!user) throw new Error("User not authenticated");
-
       // Check if progress already exists
       const { data: existingProgress } = await supabase
         .from('lesson_progress')
@@ -258,13 +273,11 @@ const CourseDetail = () => {
         .eq('lesson_id', lessonId)
         .eq('student_id', user.id)
         .single();
-
       if (existingProgress) {
         const { error } = await supabase
           .from('lesson_progress')
           .update({ completed: true, completed_at: new Date().toISOString() })
           .eq('id', existingProgress.id);
-          
         if (error) throw error;
       } else {
         const { error } = await supabase
@@ -275,32 +288,109 @@ const CourseDetail = () => {
             completed: true,
             completed_at: new Date().toISOString()
           });
-          
         if (error) throw error;
       }
-
       // Update enrollment progress
       if (enrollment) {
-        // Calculate new progress
-        const totalLessons = modules.reduce(
-          (total, module) => total + module.lessons.length, 0
-        );
-        
-        // Add this lesson to progress count
-        const completedLessons = Object.values(lessonProgress).filter(Boolean).length + 1;
-        const newProgress = Math.round((completedLessons / totalLessons) * 100);
-        
+        // Recalculate progress using new logic
+        const { data: allLessons } = await supabase
+          .from('course_lessons')
+          .select('id')
+          .eq('course_id', courseId);
+        const lessonIds = allLessons ? allLessons.map((l: any) => l.id) : [];
+        // 2. Get all completed lessons for the student
+        const { data: completedLessonsData } = await supabase
+          .from('lesson_progress')
+          .select('lesson_id')
+          .eq('student_id', user.id)
+          .eq('completed', true);
+        const completedLessonIds = completedLessonsData ? completedLessonsData.map((l: any) => l.lesson_id) : [];
+        // 3. Count how many course lessons are completed
+        const completedLessonsCount = lessonIds.filter((id: any) => completedLessonIds.includes(id)).length;
+        // Assignments
+        const { data: allAssignments } = await supabase
+          .from('assignments')
+          .select('id')
+          .eq('course_id', courseId);
+        const assignmentIds = allAssignments ? allAssignments.map((a: any) => a.id) : [];
+        const { data: completedAssignmentsData } = await supabase
+          .from('assignment_submissions')
+          .select('assignment_id')
+          .eq('student_id', user.id)
+          .eq('course_id', courseId)
+          .eq('status', 'completed');
+        const completedAssignmentIds = completedAssignmentsData ? completedAssignmentsData.map((a: any) => a.assignment_id) : [];
+        const completedAssignmentsCount = assignmentIds.filter((id: any) => completedAssignmentIds.includes(id)).length;
+        const totalLessons = lessonIds.length;
+        const totalAssignments = assignmentIds.length;
+        const totalItems = totalLessons + totalAssignments;
+        const completedItems = completedLessonsCount + completedAssignmentsCount;
+        const percent = totalItems === 0 ? 0 : Math.min(100, Math.round((completedItems / totalItems) * 100));
+        // Upsert into course_progress
+        await supabase
+          .from('course_progress')
+          .upsert({
+            student_id: user.id,
+            course_id: courseId,
+            percent,
+            completed: completedItems,
+            total: totalItems,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'student_id,course_id' });
         const { error } = await supabase
           .from('enrollments')
-          .update({ progress: newProgress })
+          .update({ progress: percent })
           .eq('id', enrollment.id);
-
         if (error) throw error;
       }
+      // --- STUDENT STATS LOGIC ---
+      // 1. Get lesson duration
+      const { data: lessonData } = await supabase
+        .from('course_lessons')
+        .select('duration')
+        .eq('id', lessonId)
+        .single();
+      const durationMin = lessonData?.duration || 0;
+      const durationHours = durationMin / 60;
+      // 2. Get today's date (UTC)
+      const today = new Date();
+      const yyyy = today.getUTCFullYear();
+      const mm = String(today.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(today.getUTCDate()).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+      // 3. Fetch current stats for today
+      const { data: statRow } = await supabase
+        .from('student_stats')
+        .select('*')
+        .eq('student_id', user.id)
+        .eq('date', dateStr)
+        .maybeSingle();
+      // Use correct types
+      const prevHours = statRow && 'hours_studied' in statRow ? statRow.hours_studied : 0;
+      const prevScore = statRow && 'community_score' in statRow ? statRow.community_score : 0;
+      let newHours = prevHours + durationHours;
+      let newScore = prevScore + 10; // +10 for lesson
+      // If crossing 1 hour for the first time today, add +5 bonus
+      if (prevHours < 1 && newHours >= 1) {
+        newScore += 5;
+      }
+      const upsertObj = {
+        student_id: user.id,
+        date: dateStr,
+        hours_studied: newHours,
+        community_score: newScore,
+        updated_at: new Date().toISOString()
+      };
+      await supabase
+        .from('student_stats')
+        .upsert(upsertObj, { onConflict: 'student_id,date' });
+      // --- END STUDENT STATS LOGIC ---
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lessonProgress', courseId, user?.id] });
       queryClient.invalidateQueries({ queryKey: ['enrollment', courseId, user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['completedAssignments', courseId, user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['courseProgress', courseId, user?.id] });
       toast({
         title: "Progress saved",
         description: "Lesson marked as completed",
@@ -358,12 +448,23 @@ const CourseDetail = () => {
   const addLessonMutation = useMutation({
     mutationFn: async () => {
       if (!newLessonModuleId || !newLessonTitle) throw new Error('Missing data');
+      let pdfUrl = null;
+      if (newLessonType === 'pdf') {
+        if (!newLessonPdfFile) throw new Error('Please select a PDF file');
+        const filePath = `lesson-pdfs/${Date.now()}-${newLessonPdfFile.name}`;
+        const { error: uploadError } = await supabase.storage.from('lesson-pdfs').upload(filePath, newLessonPdfFile);
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from('lesson-pdfs').getPublicUrl(filePath);
+        pdfUrl = urlData?.publicUrl || '';
+      }
       const insertData = {
         module_id: newLessonModuleId,
+        course_id: courseId,
         title: newLessonTitle,
         type: newLessonType,
         video_url: newLessonType === 'video' ? newLessonVideoUrl : null,
         content: newLessonType === 'text' ? newLessonContent : null,
+        pdf_url: newLessonType === 'pdf' ? pdfUrl : null,
         duration: newLessonDuration ? parseInt(newLessonDuration, 10) : null,
         position: modules.find(m => m.id === newLessonModuleId)?.lessons.length + 1 || 1
       };
@@ -381,6 +482,7 @@ const CourseDetail = () => {
       setNewLessonVideoUrl('');
       setNewLessonContent('');
       setNewLessonDuration('');
+      setNewLessonPdfFile(null);
       toast({ title: 'Lesson added' });
     },
     onError: (error) => {
@@ -392,12 +494,21 @@ const CourseDetail = () => {
   const addAssignmentMutation = useMutation({
     mutationFn: async () => {
       if (!courseId || !newAssignmentTitle || !newAssignmentDueDate) throw new Error('Missing data');
+      let questionPdfUrl = '';
+      if (newAssignmentQuestionFile) {
+        const filePath = `course-${courseId}/assignment-question-${Date.now()}.pdf`;
+        const { data: uploadData, error: uploadError } = await supabase.storage.from('assignments').upload(filePath, newAssignmentQuestionFile);
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from('assignments').getPublicUrl(filePath);
+        questionPdfUrl = urlData?.publicUrl || '';
+      }
       const { data, error } = await supabase
         .from('assignments')
         .insert({
           course_id: courseId,
           title: newAssignmentTitle,
-          due_date: newAssignmentDueDate
+          due_date: newAssignmentDueDate,
+          question_pdf_url: questionPdfUrl
         })
         .select()
         .single();
@@ -409,6 +520,8 @@ const CourseDetail = () => {
       setAddAssignmentDialogOpen(false);
       setNewAssignmentTitle('');
       setNewAssignmentDueDate('');
+      setNewAssignmentQuestionFile(null);
+      setNewAssignmentQuestionFileName('');
       toast({ title: 'Assignment added' });
       // Notify all enrolled students
       const { data: enrollments } = await supabase
@@ -497,6 +610,10 @@ const CourseDetail = () => {
       setTextLessonDialogOpen(true);
       // Optionally mark as completed immediately for text lessons
       handleCompleteLesson(lesson.id);
+    } else if (lesson.type === 'pdf') {
+      setCurrentPdfUrl(lesson.pdf_url || '');
+      setCurrentPdfLessonId(lesson.id);
+      setPdfDialogOpen(true);
     }
   };
 
@@ -582,20 +699,6 @@ const CourseDetail = () => {
     setCurrentLessonId(null);
   };
 
-  // Calculate course progress
-  const calculateProgress = () => {
-    if (!modules || !modules.length) return 0;
-    
-    const totalLessons = modules.reduce(
-      (total, module) => total + module.lessons.length, 0
-    );
-    
-    if (totalLessons === 0) return 0;
-    
-    const completedLessons = Object.values(lessonProgress).filter(Boolean).length;
-    return Math.round((completedLessons / totalLessons) * 100);
-  };
-
   // Transform YouTube URL to embed URL
   const getEmbedUrl = (url: string) => {
     if (!url) return '';
@@ -610,6 +713,172 @@ const CourseDetail = () => {
     }
     
     return url; // Return original if not YouTube URL
+  };
+
+  // 1. Add update and delete mutations for each type
+  const updateLessonMutation = useMutation({
+    mutationFn: async (lesson) => {
+      const { error } = await supabase.from('course_lessons').update(lesson).eq('id', lesson.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseModules', courseId] });
+      setEditLessonDialogOpen(false);
+      setEditItem(null);
+      toast({ title: 'Lesson updated' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to update lesson', description: error.message, variant: 'destructive' });
+    }
+  });
+  const deleteLessonMutation = useMutation({
+    mutationFn: async (id) => {
+      const { error } = await supabase.from('course_lessons').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseModules', courseId] });
+      setDeleteConfirm(null);
+      toast({ title: 'Lesson deleted' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to delete lesson', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  // Assignment update mutation
+  const updateAssignmentMutation = useMutation({
+    mutationFn: async (assignment) => {
+      const { error } = await supabase.from('assignments').update(assignment).eq('id', assignment.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['assignments', courseId] });
+      setEditAssignmentDialogOpen(false);
+      setEditItem(null);
+      toast({ title: 'Assignment updated' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to update assignment', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  // Live class update mutation
+  const updateLiveClassMutation = useMutation({
+    mutationFn: async (liveClass) => {
+      const { error } = await supabase.from('live_classes').update(liveClass).eq('id', liveClass.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['liveClasses', courseId] });
+      setEditLiveClassDialogOpen(false);
+      setEditItem(null);
+      toast({ title: 'Live class updated' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to update live class', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  // Module update and delete mutations
+  const updateModuleMutation = useMutation({
+    mutationFn: async (module) => {
+      const { error } = await supabase.from('course_modules').update(module).eq('id', module.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseModules', courseId] });
+      setEditModuleDialogOpen(false);
+      setEditItem(null);
+      toast({ title: 'Module updated' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to update module', description: error.message, variant: 'destructive' });
+    }
+  });
+  const deleteModuleMutation = useMutation({
+    mutationFn: async (id) => {
+      const { error } = await supabase.from('course_modules').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['courseModules', courseId] });
+      setDeleteConfirm(null);
+      toast({ title: 'Module deleted' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to delete module', description: error.message, variant: 'destructive' });
+    }
+  });
+  // Assignment delete mutation
+  const deleteAssignmentMutation = useMutation({
+    mutationFn: async (id) => {
+      const { error } = await supabase.from('assignments').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['assignments', courseId] });
+      setDeleteConfirm(null);
+      toast({ title: 'Assignment deleted' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to delete assignment', description: error.message, variant: 'destructive' });
+    }
+  });
+  // Live class delete mutation
+  const deleteLiveClassMutation = useMutation({
+    mutationFn: async (id) => {
+      const { error } = await supabase.from('live_classes').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['liveClasses', courseId] });
+      setDeleteConfirm(null);
+      toast({ title: 'Live class deleted' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to delete live class', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  // Fetch discussion messages for this course
+  useEffect(() => {
+    if (!courseId) return;
+    const fetchMessages = async () => {
+      setLoadingMessages(true);
+      const { data, error } = await supabase
+        .from('course_discussions')
+        .select('*')
+        .eq('course_id', courseId)
+        .order('created_at', { ascending: true });
+      if (!error) setDiscussionMessages(data || []);
+      setLoadingMessages(false);
+    };
+    fetchMessages();
+  }, [courseId]);
+
+  // Post a new message
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !user) return;
+    const { error } = await supabase
+      .from('course_discussions')
+      .insert({
+        course_id: courseId,
+        user_id: user.id,
+        user_name: profile?.name || user.email,
+        message: newMessage.trim(),
+      });
+    if (!error) {
+      setNewMessage('');
+      if (discussionInputRef.current) discussionInputRef.current.focus();
+      // Refetch messages
+      const { data } = await supabase
+        .from('course_discussions')
+        .select('*')
+        .eq('course_id', courseId)
+        .order('created_at', { ascending: true });
+      setDiscussionMessages(data || []);
+    }
   };
 
   // Loading states
@@ -758,14 +1027,16 @@ const CourseDetail = () => {
                 </div>
               )}
             </div>
+            {/* Only show progress for students */}
             {enrollment && profile?.role === 'student' && (
               <div className="mt-6 lg:mt-0 lg:ml-6 lg:self-end">
                 <div className="bg-white/10 backdrop-blur-sm p-4 rounded-lg inline-block">
                   <div className="text-center mb-3">
                     <p className="font-medium">Course Progress</p>
-                    <div className="text-3xl font-bold">{enrollment.progress || 0}%</div>
+                    <div className="text-3xl font-bold">{percent}%</div>
+                    <div className="text-xs text-gray-500">{completed} of {total} completed</div>
                   </div>
-                  <Progress value={enrollment.progress || 0} className="w-40 h-2" />
+                  <Progress value={percent} className="w-40 h-2" />
                 </div>
               </div>
             )}
@@ -780,6 +1051,9 @@ const CourseDetail = () => {
           <TabsTrigger value="assignments">Assignments</TabsTrigger>
           <TabsTrigger value="resources">Resources</TabsTrigger>
           <TabsTrigger value="discussions">Discussions</TabsTrigger>
+          {(profile?.role === 'teacher' && course.instructor_id === user?.id) || (profile?.role === 'student' && enrollment) ? (
+            <TabsTrigger value="attendance">Attendance</TabsTrigger>
+          ) : null}
         </TabsList>
         
         <TabsContent value="content" className="animate-fade-in">
@@ -799,14 +1073,20 @@ const CourseDetail = () => {
                   
                   <div className="divide-y">
                     {module.lessons.map((lesson: any) => {
-                      const isCompleted = lessonProgress[lesson.id] === true;
+                      const isCompleted = completedLessonIds.includes(lesson.id);
                       
                       return (
-                        <div key={lesson.id} className="p-4 hover:bg-muted/20 transition-colors">
+                        <div
+                          key={lesson.id}
+                          className={`p-4 hover:bg-muted/20 transition-colors ${profile?.role === 'student' ? 'cursor-pointer' : ''}`}
+                          onClick={profile?.role === 'student' ? () => handleStartLesson(lesson) : undefined}
+                        >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center">
                               {lesson.type === 'video' ? (
                                 <Video className="w-5 h-5 mr-3 text-brightmind-blue" />
+                              ) : lesson.type === 'pdf' ? (
+                                <FileText className="w-5 h-5 mr-3 text-brightmind-purple" />
                               ) : (
                                 <FileText className="w-5 h-5 mr-3 text-brightmind-purple" />
                               )}
@@ -827,15 +1107,17 @@ const CourseDetail = () => {
                               </div>
                             </div>
                             
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => handleStartLesson(lesson)}
-                              disabled={!enrollment && lesson.type === 'video'}
-                            >
-                              <PlayCircle className="mr-1 h-4 w-4" />
-                              {isCompleted ? "Replay" : "Start"}
-                            </Button>
+                            {profile?.role === 'teacher' && user?.id === course.instructor_id && (
+                              <div className="flex gap-2 ml-4">
+                                <Button variant="ghost" size="icon" onClick={() => { setEditLessonDialogOpen(true); setEditItem(lesson); }}><Pencil className="h-4 w-4" /></Button>
+                                <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm({ type: 'lesson', id: lesson.id })}><Trash className="h-4 w-4 text-red-500" /></Button>
+                              </div>
+                            )}
+                            {lesson.type === 'pdf' && lesson.pdf_url && profile?.role === 'student' && (
+                              <Button size="sm" className="ml-4" onClick={e => { e.stopPropagation(); setCurrentPdfUrl(lesson.pdf_url); setCurrentPdfLessonId(lesson.id); setPdfDialogOpen(true); }}>
+                                View PDF
+                              </Button>
+                            )}
                           </div>
                         </div>
                       );
@@ -892,13 +1174,12 @@ const CourseDetail = () => {
                       </div>
                     </div>
                   </div>
-                  <Button 
-                    variant="default"
-                    size="sm"
-                    disabled={!enrollment}
-                  >
-                    View Assignment
-                  </Button>
+                  {profile?.role === 'teacher' && user?.id === course.instructor_id && (
+                    <div className="flex gap-2 ml-4">
+                      <Button variant="ghost" size="icon" onClick={() => { setEditAssignmentDialogOpen(true); setEditItem(assignment); }}><Pencil className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm({ type: 'assignment', id: assignment.id })}><Trash className="h-4 w-4 text-red-500" /></Button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -930,13 +1211,56 @@ const CourseDetail = () => {
         </TabsContent>
         
         <TabsContent value="discussions" className="animate-fade-in">
-          <div className="p-8 text-center bg-muted/20 rounded-lg">
-            <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-medium mb-2">Join the Discussion</h3>
-            <p className="text-muted-foreground mb-4">Connect with other students and ask questions about this course.</p>
-            <Button disabled={!enrollment}>Start a Discussion</Button>
+          <div className="p-4 md:p-8 bg-muted/20 rounded-lg max-w-2xl mx-auto">
+            <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
+              <Users className="h-6 w-6 text-muted-foreground" />
+              Course Discussions
+            </h3>
+            {loadingMessages ? (
+              <div className="text-center text-muted-foreground">Loading messages...</div>
+            ) : (
+              <div className="space-y-4 max-h-80 overflow-y-auto mb-4">
+                {discussionMessages.length === 0 ? (
+                  <div className="text-center text-muted-foreground">No messages yet. Start the conversation!</div>
+                ) : (
+                  discussionMessages.map(msg => (
+                    <div key={msg.id} className="bg-white/80 border border-gray-200 rounded-lg p-3">
+                      <div className="text-sm font-semibold text-brightmind-blue">{msg.user_name}</div>
+                      <div className="text-base mt-1">{msg.message}</div>
+                      <div className="text-xs text-gray-400 mt-1">{new Date(msg.created_at).toLocaleString()}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+            {enrollment ? (
+              <div className="flex gap-2 mt-2">
+                <Input
+                  ref={discussionInputRef}
+                  value={newMessage}
+                  onChange={e => setNewMessage(e.target.value)}
+                  placeholder="Type your message..."
+                  onKeyDown={e => { if (e.key === 'Enter') handleSendMessage(); }}
+                  className="flex-1"
+                />
+                <Button onClick={handleSendMessage} disabled={!newMessage.trim()}>Send</Button>
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground mt-4">Enroll in this course to join the discussion.</div>
+            )}
           </div>
         </TabsContent>
+
+        {profile?.role === 'teacher' && course.instructor_id === user?.id && (
+          <TabsContent value="attendance" className="animate-fade-in">
+            <AttendanceTab courseId={courseId} />
+          </TabsContent>
+        )}
+        {profile?.role === 'student' && enrollment && (
+          <TabsContent value="attendance" className="animate-fade-in">
+            <StudentAttendanceView courseId={courseId} userId={user?.id} />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Video Dialog */}
@@ -977,6 +1301,7 @@ const CourseDetail = () => {
           <select className="w-full mt-2" value={newLessonType} onChange={e => setNewLessonType(e.target.value)}>
             <option value="video">Video</option>
             <option value="text">Text</option>
+            <option value="pdf">PDF</option>
           </select>
           {newLessonType === 'video' && (
             <Input className="mt-2" placeholder="YouTube Video URL" value={newLessonVideoUrl} onChange={e => setNewLessonVideoUrl(e.target.value)} />
@@ -986,6 +1311,12 @@ const CourseDetail = () => {
               <ReactQuill value={newLessonContent} onChange={setNewLessonContent} theme="snow"
                 style={{ maxHeight: 600, overflowY: 'auto' }}
               />
+            </div>
+          )}
+          {newLessonType === 'pdf' && (
+            <div className="mt-2">
+              <Input type="file" accept="application/pdf" onChange={e => setNewLessonPdfFile(e.target.files?.[0] || null)} />
+              {newLessonPdfFile && <div className="text-xs mt-1">Selected: {newLessonPdfFile.name}</div>}
             </div>
           )}
           <Input className="mt-2" type="number" min="1" placeholder="Duration (minutes)" value={newLessonDuration} onChange={e => setNewLessonDuration(e.target.value)} />
@@ -999,6 +1330,21 @@ const CourseDetail = () => {
           <DialogHeader><DialogTitle>Add Assignment</DialogTitle></DialogHeader>
           <Input placeholder="Assignment Title" value={newAssignmentTitle} onChange={e => setNewAssignmentTitle(e.target.value)} />
           <Input type="date" className="mt-2" value={newAssignmentDueDate} onChange={e => setNewAssignmentDueDate(e.target.value)} />
+          <div className="mt-2">
+            <label className="block text-sm font-medium mb-1">Upload Question PDF</label>
+            <Input
+              type="file"
+              accept="application/pdf"
+              onChange={e => {
+                const file = e.target.files?.[0] || null;
+                setNewAssignmentQuestionFile(file);
+                setNewAssignmentQuestionFileName(file ? file.name : '');
+              }}
+            />
+            {newAssignmentQuestionFileName && (
+              <div className="text-xs text-muted-foreground mt-1">Selected: {newAssignmentQuestionFileName}</div>
+            )}
+          </div>
           <Button className="mt-4 w-full" onClick={() => addAssignmentMutation.mutate()} disabled={addAssignmentMutation.isPending}>Add Assignment</Button>
         </DialogContent>
       </Dialog>
@@ -1042,6 +1388,130 @@ const CourseDetail = () => {
             <div dangerouslySetInnerHTML={{ __html: currentTextLessonContent }} />
           </div>
           <Button className="mt-4" onClick={() => setTextLessonDialogOpen(false)}>Close</Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Lesson Dialog */}
+      <Dialog open={editLessonDialogOpen} onOpenChange={(open) => { setEditLessonDialogOpen(open); if (!open) setEditItem(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Lesson</DialogTitle></DialogHeader>
+          {editItem && (
+            <>
+              <select className="w-full mb-2" value={editItem.module_id} onChange={e => setEditItem({ ...editItem, module_id: e.target.value })}>
+                <option value="">Select Module</option>
+                {modules.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
+              </select>
+              <Input placeholder="Lesson Title" value={editItem.title} onChange={e => setEditItem({ ...editItem, title: e.target.value })} />
+              <select className="w-full mt-2" value={editItem.type} onChange={e => setEditItem({ ...editItem, type: e.target.value })}>
+                <option value="video">Video</option>
+                <option value="text">Text</option>
+              </select>
+              {editItem.type === 'video' && (
+                <Input className="mt-2" placeholder="YouTube Video URL" value={editItem.video_url} onChange={e => setEditItem({ ...editItem, video_url: e.target.value })} />
+              )}
+              {editItem.type === 'text' && (
+                <div className="mt-2">
+                  <ReactQuill value={editItem.content} onChange={e => setEditItem({ ...editItem, content: e })} theme="snow"
+                    style={{ maxHeight: 600, overflowY: 'auto' }}
+                  />
+                </div>
+              )}
+              <Input className="mt-2" type="number" min="1" placeholder="Duration (minutes)" value={editItem.duration} onChange={e => setEditItem({ ...editItem, duration: e.target.value ? parseInt(e.target.value, 10) : null })} />
+              <Button className="mt-4 w-full" onClick={() => { updateLessonMutation.mutate(editItem); setEditLessonDialogOpen(false); setEditItem(null); }} disabled={updateLessonMutation.isPending}>Save</Button>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Module Dialog */}
+      <Dialog open={editModuleDialogOpen} onOpenChange={(open) => { setEditModuleDialogOpen(open); if (!open) setEditItem(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Module</DialogTitle></DialogHeader>
+          {editItem && (
+            <>
+              <Input placeholder="Module Title" value={editItem.title} onChange={e => setEditItem({ ...editItem, title: e.target.value })} />
+              <Button className="mt-4 w-full" onClick={() => { if (editItem) updateModuleMutation.mutate(editItem); setEditModuleDialogOpen(false); setEditItem(null); }}>Save</Button>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Assignment Dialog */}
+      <Dialog open={editAssignmentDialogOpen} onOpenChange={(open) => { setEditAssignmentDialogOpen(open); if (!open) setEditItem(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Assignment</DialogTitle></DialogHeader>
+          {editItem && (
+            <>
+              <Input placeholder="Assignment Title" value={editItem.title} onChange={e => setEditItem({ ...editItem, title: e.target.value })} />
+              <Input type="date" className="mt-2" value={editItem.due_date} onChange={e => setEditItem({ ...editItem, due_date: e.target.value })} />
+              <Button className="mt-4 w-full" onClick={() => { if (editItem) updateAssignmentMutation.mutate(editItem); setEditAssignmentDialogOpen(false); setEditItem(null); }}>Save</Button>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Live Class Dialog */}
+      <Dialog open={editLiveClassDialogOpen} onOpenChange={(open) => { setEditLiveClassDialogOpen(open); if (!open) setEditItem(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Live Class</DialogTitle></DialogHeader>
+          {editItem && (
+            <>
+              <Input placeholder="Title" value={editItem.title} onChange={e => setEditItem({ ...editItem, title: e.target.value })} />
+              <Input type="datetime-local" className="mt-2" value={editItem.start_time} onChange={e => setEditItem({ ...editItem, start_time: e.target.value })} />
+              <Input type="number" className="mt-2" placeholder="Duration (minutes)" value={editItem.duration} onChange={e => setEditItem({ ...editItem, duration: e.target.value ? parseInt(e.target.value, 10) : null })} />
+              <Input className="mt-2" placeholder="Meeting URL" value={editItem.meeting_url} onChange={e => setEditItem({ ...editItem, meeting_url: e.target.value })} />
+              <Button className="mt-4 w-full" onClick={() => { if (editItem) updateLiveClassMutation.mutate(editItem); setEditLiveClassDialogOpen(false); setEditItem(null); }}>Save</Button>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirm !== null} onOpenChange={() => setDeleteConfirm(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Confirm Deletion</DialogTitle></DialogHeader>
+          <p>Are you sure you want to delete this {deleteConfirm?.type}?</p>
+          <div className="flex gap-2">
+            <Button variant="destructive" onClick={() => {
+              if (deleteConfirm) {
+                if (deleteConfirm.type === 'lesson') {
+                  deleteLessonMutation.mutate(deleteConfirm.id);
+                } else if (deleteConfirm.type === 'module') {
+                  deleteModuleMutation.mutate(deleteConfirm.id);
+                } else if (deleteConfirm.type === 'assignment') {
+                  deleteAssignmentMutation.mutate(deleteConfirm.id);
+                } else if (deleteConfirm.type === 'live_class') {
+                  deleteLiveClassMutation.mutate(deleteConfirm.id);
+                }
+                setDeleteConfirm(null);
+              }
+            }}>Delete</Button>
+            <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* PDF Dialog */}
+      <Dialog open={pdfDialogOpen} onOpenChange={(open) => {
+        setPdfDialogOpen(open);
+        if (!open && currentPdfLessonId) {
+          handleCompleteLesson(currentPdfLessonId);
+          setCurrentPdfLessonId(null);
+        }
+      }}>
+        <DialogContent className="max-w-4xl w-[90vw] h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>PDF Lesson</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 w-full h-full">
+            <iframe
+              src={currentPdfUrl}
+              className="w-full h-full"
+              style={{ minHeight: 500 }}
+              allow="autoplay"
+              title="PDF Lesson"
+            ></iframe>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

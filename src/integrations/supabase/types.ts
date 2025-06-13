@@ -509,6 +509,138 @@ export type Database = {
           },
         ]
       }
+      course_progress: {
+        Row: {
+          id: string;
+          student_id: string;
+          course_id: string;
+          percent: number;
+          completed: number;
+          total: number;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          student_id: string;
+          course_id: string;
+          percent: number;
+          completed: number;
+          total: number;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          student_id?: string;
+          course_id?: string;
+          percent?: number;
+          completed?: number;
+          total?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "course_progress_student_id_fkey",
+            columns: ["student_id"],
+            isOneToOne: false,
+            referencedRelation: "profiles",
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "course_progress_course_id_fkey",
+            columns: ["course_id"],
+            isOneToOne: false,
+            referencedRelation: "courses",
+            referencedColumns: ["id"]
+          }
+        ];
+      }
+      student_stats: {
+        Row: {
+          id: string;
+          student_id: string;
+          date: string;
+          hours_studied: number;
+          community_score: number;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          student_id: string;
+          date: string;
+          hours_studied?: number;
+          community_score?: number;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          student_id?: string;
+          date?: string;
+          hours_studied?: number;
+          community_score?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "student_stats_student_id_fkey",
+            columns: ["student_id"],
+            isOneToOne: false,
+            referencedRelation: "profiles",
+            referencedColumns: ["id"]
+          }
+        ];
+      }
+      attendance_records: {
+        Row: {
+          id: string;
+          course_id: string;
+          student_id: string;
+          date: string;
+          status: 'present' | 'absent';
+          marked_by: string | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          course_id: string;
+          student_id: string;
+          date: string;
+          status: 'present' | 'absent';
+          marked_by?: string | null;
+          created_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          course_id?: string;
+          student_id?: string;
+          date?: string;
+          status?: 'present' | 'absent';
+          marked_by?: string | null;
+          created_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "attendance_records_course_id_fkey",
+            columns: ["course_id"],
+            isOneToOne: false,
+            referencedRelation: "courses",
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_records_student_id_fkey",
+            columns: ["student_id"],
+            isOneToOne: false,
+            referencedRelation: "profiles",
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_records_marked_by_fkey",
+            columns: ["marked_by"],
+            isOneToOne: false,
+            referencedRelation: "profiles",
+            referencedColumns: ["id"]
+          }
+        ];
+      },
     }
     Views: {
       [_ in never]: never

@@ -1,4 +1,4 @@
-import { MoreVertical } from 'lucide-react';
+import { MoreVertical, BookOpen, User2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface CourseProgress {
@@ -31,7 +31,7 @@ const CourseCard = ({
   userRole = '',
   onEnroll
 }: CourseCardProps) => {
-  const progressPercent = Math.round((progress.completed / progress.total) * 100);
+  const progressPercent = progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0;
   
   return (
     <div 
@@ -40,8 +40,14 @@ const CourseCard = ({
     >
       <div className="flex justify-between items-start mb-4">
         <div className="pr-8">
-          <h3 className="font-bold text-base sm:text-lg mb-1 line-clamp-2">{title}</h3>
-          <p className="text-sm opacity-80 line-clamp-1">{instructor}</p>
+          <h3 className="font-bold text-base sm:text-lg mb-1 line-clamp-2 flex items-center gap-2">
+            <BookOpen className="h-5 w-5 text-white drop-shadow" />
+            {title}
+          </h3>
+          <p className="text-sm opacity-90 line-clamp-1 flex items-center gap-1">
+            <User2 className="h-4 w-4 text-white/80 mr-1" />
+            <span className="font-medium text-white/90">Teacher: {instructor}</span>
+          </p>
         </div>
         <Button variant="ghost" size="icon" className="h-8 w-8 absolute top-4 right-4">
           <MoreVertical className="h-5 w-5" />
@@ -63,18 +69,22 @@ const CourseCard = ({
         </div>
       )}
       
-      <div className="mt-8 sm:mt-12">
-        <div className="flex justify-between text-sm mb-2">
-          <span>Progress</span>
-          <span>{progressPercent}%</span>
+      {/* Only show progress for students who are enrolled */}
+      {userRole === 'student' && isEnrolled && (
+        <div className="mt-8 sm:mt-12">
+          <div className="flex justify-between text-sm mb-2">
+            <span>Progress</span>
+            <span>{progressPercent}%</span>
+          </div>
+          <div className="h-2 w-full bg-black/10 rounded-full overflow-hidden mb-1">
+            <div 
+              className="h-full bg-white transition-all duration-700 ease-out" 
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <div className="text-xs text-right text-white">{progress.completed} of {progress.total} completed</div>
         </div>
-        <div className="h-2 w-full bg-black/10 rounded-full overflow-hidden">
-          <div 
-            className="h-full bg-white transition-all duration-700 ease-out" 
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
-      </div>
+      )}
     </div>
   );
 };

@@ -1,11 +1,12 @@
-
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Lightbulb, Send, Sparkles, Bot, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import ReactMarkdown from 'react-markdown';
+import React, { createContext, useContext } from 'react';
 
 interface Message {
   id: string;
@@ -46,6 +47,28 @@ const mockRecommendations: CourseRecommendation[] = [
   }
 ];
 
+const SYSTEM_PROMPT = `
+You are a helpful AI assistant for an O/A Level learning platform. Your job is to provide information, guidance, and suggestions to students about O and A Levels, including subject choices, exam tips, course recommendations, and academic support. You can answer questions about O/A Level subjects, exam preparation, study strategies, and help students find the right courses or resources for their goals. Be friendly, supportive, and focused on helping students succeed in their O/A Level journey.`;
+
+const API_ENDPOINT = "https://models.github.ai/inference";
+const MODEL = "openai/gpt-4.1";
+const API_TOKEN = "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";
+
+// Memory Context for storing chat memory
+const MemoryContext = createContext({ memory: [], addToMemory: (entry: any) => {}, clearMemory: () => {} });
+export function useMemory() { return useContext(MemoryContext); }
+
+export function MemoryProvider({ children }: { children: React.ReactNode }) {
+  const [memory, setMemory] = useState<any[]>([]);
+  const addToMemory = (entry: any) => setMemory(prev => [...prev, entry]);
+  const clearMemory = () => setMemory([]);
+  return (
+    <MemoryContext.Provider value={{ memory, addToMemory, clearMemory }}>
+      {children}
+    </MemoryContext.Provider>
+  );
+}
+
 const AISuggestions = () => {
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -58,11 +81,51 @@ const AISuggestions = () => {
     }
   ]);
   const [showRecommendations, setShowRecommendations] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [typingContent, setTypingContent] = useState<string | null>(null);
+  const [fullContent, setFullContent] = useState<string | null>(null);
+  const typingInterval = useRef<NodeJS.Timeout | null>(null);
+  const { memory, addToMemory, clearMemory } = useMemory();
 
-  const handleSubmit = () => {
+  useEffect(() => {
+    if (fullContent !== null) {
+      let i = 0;
+      setTypingContent('');
+      if (typingInterval.current) clearInterval(typingInterval.current);
+      typingInterval.current = setInterval(() => {
+        setTypingContent((prev) => {
+          const next = fullContent.slice(0, (prev?.length || 0) + 1);
+          if (next.length === fullContent.length) {
+            if (typingInterval.current) clearInterval(typingInterval.current);
+            setFullContent(null);
+          }
+          return next;
+        });
+      }, 15);
+    }
+    return () => {
+      if (typingInterval.current) clearInterval(typingInterval.current);
+    };
+  }, [fullContent]);
+
+  useEffect(() => {
+    if (typingContent !== null) {
+      setMessages((prev) => {
+        const lastIdx = prev.length - 1;
+        if (lastIdx < 0 || prev[lastIdx].role !== 'assistant') return prev;
+        const updated = [...prev];
+        updated[lastIdx] = {
+          ...updated[lastIdx],
+          content: typingContent,
+        };
+        return updated;
+      });
+    }
+  }, [typingContent]);
+
+  const handleSubmit = async () => {
     if (!inputText.trim()) return;
     
-    // Add user message
     const userMessage: Message = {
       id: `${Date.now()}-user`,
       content: inputText,
@@ -71,50 +134,75 @@ const AISuggestions = () => {
     };
     
     setMessages(prev => [...prev, userMessage]);
+    addToMemory(userMessage.content);
     setInputText('');
     setIsLoading(true);
+    setError(null);
     
-    // Simulate AI response delay
-    setTimeout(() => {
+    const memoryContext = memory.length > 0 ? `\nPrevious context: ${memory.join('\n')}` : '';
+    const apiMessages = [
+      { role: 'system', content: SYSTEM_PROMPT + memoryContext },
+      ...[...messages, userMessage].map(m => ({ role: m.role, content: m.content }))
+    ];
+
+    try {
+      const response = await fetch(`${API_ENDPOINT}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${API_TOKEN}`
+        },
+        body: JSON.stringify({
+          messages: apiMessages,
+          temperature: 0.7,
+          top_p: 1.0,
+          model: MODEL
+        })
+      });
+      const data = await response.json();
       let responseContent = '';
-      
-      if (inputText.toLowerCase().includes('recommend') || 
-          inputText.toLowerCase().includes('suggest') ||
-          inputText.toLowerCase().includes('course')) {
-        responseContent = "Based on your interests and learning style, I've analyzed our course catalog to find the best matches for you. Here are some courses that might help you achieve your academic goals.";
-        setShowRecommendations(true);
+      if (data.choices && data.choices[0]?.message?.content) {
+        responseContent = data.choices[0].message.content;
+        if (responseContent.toLowerCase().includes('recommend') || responseContent.toLowerCase().includes('suggest')) {
+          setShowRecommendations(true);
+        }
       } else {
-        responseContent = "I'd be happy to recommend some courses for you. To provide the most relevant suggestions, could you tell me more about your academic goals? What subjects are you particularly interested in, and are there any specific areas where you'd like to improve?";
+        responseContent = "Sorry, I couldn't get a response from the AI.";
       }
-      
       const aiResponse: Message = {
         id: `${Date.now()}-assistant`,
-        content: responseContent,
+        content: '',
         role: 'assistant',
         timestamp: new Date()
       };
-      
       setMessages(prev => [...prev, aiResponse]);
-      setIsLoading(false);
-    }, 1500);
+      setFullContent(responseContent);
+      setTypingContent('');
+    } catch (err: any) {
+      setError("Error contacting AI service.");
+    }
+    setIsLoading(false);
   };
 
   return (
-    <div className="container mx-auto animate-fade-in">
-      <div className="flex flex-col lg:flex-row gap-8">
+    <div className="container mx-auto animate-fade-in min-h-screen flex flex-col">
+      <div className="flex flex-col lg:flex-row gap-8 flex-1">
         {/* Chat Section */}
-        <div className="lg:w-2/3">
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold mb-2 flex items-center">
-              <Sparkles className="h-8 w-8 mr-2 text-brightmind-purple" />
-              AI Course Suggestions
-            </h1>
-            <p className="text-gray-600">Get personalized course recommendations based on your learning style and goals</p>
+        <div className="lg:w-2/3 flex flex-col flex-1">
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-bold mb-2 flex items-center">
+                <Sparkles className="h-8 w-8 mr-2 text-brightmind-purple" />
+                AI Course Suggestions
+              </h1>
+              <p className="text-gray-600">Get personalized course recommendations based on your learning style and goals</p>
+            </div>
+            <Button variant="outline" onClick={() => { setMessages([]); clearMemory(); }}>Clear Chat</Button>
           </div>
           
-          <div className="bg-white rounded-lg shadow-sm border overflow-hidden h-[600px] flex flex-col">
+          <div className="bg-white rounded-lg shadow-sm border overflow-hidden flex flex-col flex-1 min-h-0">
             {/* Messages */}
-            <div className="flex-1 overflow-auto p-4">
+            <div className="flex-1 overflow-auto p-4 min-h-0">
               {messages.map((message) => (
                 <div 
                   key={message.id}
@@ -143,7 +231,11 @@ const AISuggestions = () => {
                           : 'bg-gray-100 text-gray-800 rounded-tl-none'
                       }`}
                     >
-                      {message.content}
+                      {message.role === 'assistant' ? (
+                        <ReactMarkdown>{message.content}</ReactMarkdown>
+                      ) : (
+                        message.content
+                      )}
                       <div 
                         className={`text-xs mt-1 ${
                           message.role === 'user' ? 'text-white/70' : 'text-gray-500'
@@ -267,4 +359,10 @@ const AISuggestions = () => {
   );
 };
 
-export default AISuggestions;
+export default function AISuggestionsWithMemory() {
+  return (
+    <MemoryProvider>
+      <AISuggestions />
+    </MemoryProvider>
+  );
+}

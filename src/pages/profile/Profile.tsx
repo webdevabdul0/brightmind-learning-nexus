@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, ChangeEvent, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   User, 
@@ -25,16 +25,42 @@ import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 
+const COURSE_COLORS = [
+  'bg-brightmind-purple text-white',
+  'bg-brightmind-blue text-white',
+  'bg-blue-500 text-white',
+  'bg-green-500 text-white',
+  'bg-indigo-500 text-white',
+  'bg-fuchsia-500 text-white',
+  'bg-rose-500 text-white',
+  'bg-orange-500 text-white',
+  'bg-amber-500 text-white',
+  'bg-emerald-500 text-white',
+  'bg-cyan-500 text-white',
+  'bg-violet-500 text-white',
+  'bg-pink-500 text-white',
+  'bg-red-500 text-white',
+  'bg-blue-500 text-white',
+  'bg-green-500 text-white',
+  'bg-indigo-500 text-white',
+];
+
+function getRandomColor(idx: number) {
+  return COURSE_COLORS[idx % COURSE_COLORS.length];
+}
+
 const Profile = () => {
   const { user, profile, updateProfile } = useAuth();
   const { toast } = useToast();
-  const [isEditing, setIsEditing] = useState(false);
-  const queryClient = useQueryClient();
-  
+
   // Only allow the user, teachers, or admins to view/edit
   if (!user || (!['teacher', 'admin'].includes(profile?.role) && user.id !== profile?.id)) {
     return <div className="p-8 text-center text-red-600 font-bold">Unauthorized</div>;
   }
+
+  // All hooks must be after the authorization check
+  const [isEditing, setIsEditing] = useState(false);
+  const queryClient = useQueryClient();
   
   // Form state
   const [profileForm, setProfileForm] = useState({
@@ -46,6 +72,8 @@ const Profile = () => {
     grade: profile?.grade || '',
     bio: profile?.bio || ''
   });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch enrolled courses
   const { data: enrolledCourses = [], isLoading: isLoadingCourses } = useQuery({
@@ -109,10 +137,38 @@ const Profile = () => {
   };
 
   const handleUploadPhoto = () => {
-    toast({
-      title: "Photo upload",
-      description: "Profile photo upload functionality will be implemented soon.",
-    });
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!user) return;
+    try {
+      // Upload to Supabase Storage
+      const fileExt = file.name.split('.').pop();
+      const filePath = `avatars/${user.id}.${fileExt}`;
+      const { data, error } = await supabase.storage.from('avatars').upload(filePath, file, { upsert: true });
+      if (error) throw error;
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      const avatar_url = publicUrlData.publicUrl;
+      // Update profile
+      await updateProfile({ ...profile, avatar_url });
+      toast({
+        title: 'Profile photo updated',
+        description: 'Your profile photo has been updated successfully.'
+      });
+      queryClient.invalidateQueries();
+    } catch (error: any) {
+      toast({
+        title: 'Upload failed',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
   };
 
   // Update form state
@@ -166,6 +222,13 @@ const Profile = () => {
                   >
                     <Upload className="h-4 w-4" />
                   </Button>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={fileInputRef}
+                    style={{ display: 'none' }}
+                    onChange={handleFileChange}
+                  />
                 </div>
                 <CardTitle className="text-center text-2xl">{profile?.name || 'User'}</CardTitle>
                 <div className="flex items-center text-muted-foreground gap-1 mt-1">
@@ -358,31 +421,31 @@ const Profile = () => {
                 {isLoadingCourses ? (
                   renderCourseSkeletons()
                 ) : enrolledCourses && enrolledCourses.length > 0 ? (
-                  enrolledCourses.map((enrollment: any) => (
-                    <div key={enrollment.id} className="bg-slate-50 p-4 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold flex items-center">
-                          <BookOpen className="h-5 w-5 mr-2 text-brightmind-blue" />
-                          {enrollment.course.title}
-                        </h3>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="text-brightmind-blue"
-                          onClick={() => window.location.href = `/courses/${enrollment.course.id}`}
-                        >
-                          View Course
-                        </Button>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-sm">
-                          <span>Progress</span>
-                          <span>{enrollment.progress || 0}%</span>
+                  enrolledCourses.map((enrollment: any) => {
+                    const course = enrollment.course;
+                    const hash = Math.abs(
+                      [...course.id + course.title].reduce((acc, c) => acc + c.charCodeAt(0), 0)
+                    );
+                    const color = getRandomColor(hash);
+                    return (
+                      <div key={enrollment.id} className={`rounded-xl p-4 ${color}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="font-semibold flex items-center">
+                            <BookOpen className="h-5 w-5 mr-2 text-white drop-shadow" />
+                            {course.title}
+                          </h3>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-white"
+                            onClick={() => window.location.href = `/courses/${course.id}`}
+                          >
+                            View Course
+                          </Button>
                         </div>
-                        <Progress value={enrollment.progress || 0} className="h-2" />
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="text-center p-6 bg-muted/40 rounded-lg">
                     <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />

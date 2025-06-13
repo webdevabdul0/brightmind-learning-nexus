@@ -77,11 +77,12 @@ const SidebarLayout = ({ children }: Props) => {
     ...(userRole === 'admin' ? [{ icon: <Home size={20} />, label: 'Admin', to: '/admin', roles: ['admin'] }] : []),
     { icon: <Home size={20} />, label: 'Dashboard', to: '/', roles: ['student', 'teacher'] },
     { icon: <BookOpen size={20} />, label: 'Courses', to: '/courses', roles: ['student', 'teacher'] },
+    // Quizzes tab for all roles
+    { icon: <FileText size={20} />, label: 'Quizzes', to: '/quizzes', roles: ['student', 'teacher', 'admin'] },
     // Only show Assignments, Live Classes, Performance to students
     ...(userRole === 'student' ? [
       { icon: <FileText size={20} />, label: 'Assignments', to: '/assignments', roles: ['student'] },
       { icon: <Video size={20} />, label: 'Live Classes', to: '/live-classes', roles: ['student'] },
-      { icon: <BarChart size={20} />, label: 'Performance', to: '/performance', roles: ['student'] },
     ] : []),
     { icon: <MessageSquare size={20} />, label: 'AI Suggestions', to: '/ai-suggestions', roles: ['student', 'teacher', 'admin'] },
     { icon: <Bell size={20} />, label: 'Notifications', to: '/notifications', roles: ['student', 'teacher', 'admin'] },
