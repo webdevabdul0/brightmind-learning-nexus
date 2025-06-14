@@ -6,7 +6,10 @@ import {
   FileText, 
   Video, 
   Plus, 
-  Search
+  Search,
+  Calendar,
+  Trash,
+  Pencil
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -122,6 +125,23 @@ const AdminDashboard = () => {
         .eq('role', 'teacher');
       if (error) {
         toast({ title: 'Error fetching teachers', description: error.message, variant: 'destructive' });
+        throw error;
+      }
+      return data;
+    }
+  });
+
+  // Fetch recent quizzes
+  const { data: quizzes = [], isLoading: isLoadingQuizzes } = useQuery<any[]>({
+    queryKey: ['adminQuizzes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('quizzes')
+        .select('*, course:courses(title), teacher:created_by(name)')
+        .order('scheduled_at', { ascending: false })
+        .limit(10);
+      if (error) {
+        toast({ title: 'Error fetching quizzes', description: error.message, variant: 'destructive' });
         throw error;
       }
       return data;
@@ -318,11 +338,41 @@ const AdminDashboard = () => {
           <TabsTrigger value="courses">Courses</TabsTrigger>
           <TabsTrigger value="students">Students</TabsTrigger>
           <TabsTrigger value="assignments">Assignments</TabsTrigger>
+          <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
           <TabsTrigger value="lectures">Lectures</TabsTrigger>
           <TabsTrigger value="teachers">Teachers</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
+          {/* Recent Quizzes */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Quizzes</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {isLoadingQuizzes ? (
+                  <Skeleton className="h-20 w-full" />
+                ) : (
+                  quizzes.slice(0, 5).map((quiz) => (
+                    <div key={quiz.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center space-x-4">
+                        <Calendar className="h-5 w-5 text-brightmind-blue" />
+                        <div>
+                          <p className="font-medium">{quiz.title}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {quiz.course?.title} • Scheduled {new Date(quiz.scheduled_at).toLocaleDateString()} • Teacher: {quiz.teacher?.name || 'N/A'}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="secondary">Quiz</Badge>
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Recent Activity */}
           <Card>
             <CardHeader>
@@ -497,6 +547,38 @@ const AdminDashboard = () => {
                             {assignment.submissions?.[0]?.count || 0} submissions
                           </Badge>
                          
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="quizzes" className="space-y-4">
+          {/* Quiz Management */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Quiz Management</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {isLoadingQuizzes ? (
+                  <Skeleton className="h-20 w-full" />
+                ) : (
+                  quizzes.map((quiz) => (
+                    <div key={quiz.id} className="p-4 border rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <h3 className="font-medium">{quiz.title}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {quiz.course?.title} • Scheduled {new Date(quiz.scheduled_at).toLocaleDateString()} • Teacher: {quiz.teacher?.name || 'N/A'}
+                          </p>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Badge variant="secondary">Quiz</Badge>
                         </div>
                       </div>
                     </div>
