@@ -6,10 +6,9 @@ import { Textarea } from '../../components/ui/textarea';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/ui/select';
 import { Label } from '../../components/ui/label';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../integrations/supabase/client';
-
-// Placeholder: Replace with actual user from context/API
-const user = { id: 'test-teacher-id' };
+import { supabase, sendNotifications } from '../../integrations/supabase/client';
+import { useAuth } from '@/providers/AuthProvider';
+import { useToast } from '@/components/ui/use-toast';
 
 const defaultQuestion = {
   question_text: '',
@@ -20,6 +19,8 @@ const defaultQuestion = {
 };
 
 export default function QuizCreate() {
+  const { user, profile } = useAuth();
+  const { toast } = useToast();
   const [courseId, setCourseId] = useState('');
   const [title, setTitle] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
@@ -30,18 +31,24 @@ export default function QuizCreate() {
   const [loadingCourses, setLoadingCourses] = useState(true);
   const navigate = useNavigate();
 
+  // Only allow teachers
+  if (profile?.role !== 'teacher') {
+    navigate('/quizzes');
+    return null;
+  }
+
   useEffect(() => {
     const fetchCourses = async () => {
       setLoadingCourses(true);
       const { data, error } = await supabase
-        .from('teacher_courses')
-        .select('course_id, courses (id, name)')
-        .eq('teacher_id', user.id);
+        .from('courses')
+        .select('id, title')
+        .eq('instructor_id', user.id);
       if (!error && data) {
         setAssignedCourses(
-          data.map((row: any) => ({
-            id: row.courses.id,
-            name: row.courses.name,
+          data.map((course: any) => ({
+            id: course.id,
+            name: course.title,
           }))
         );
       }
@@ -73,7 +80,11 @@ export default function QuizCreate() {
 
   const handleSave = async () => {
     setSaving(true);
-
+    // Convert local datetime to UTC ISO string
+    let scheduledAtUTC = '';
+    if (scheduledAt) {
+      scheduledAtUTC = new Date(scheduledAt).toISOString();
+    }
     // 1. Insert quiz
     const { data: quiz, error: quizError } = await supabase
       .from('quizzes')
@@ -81,7 +92,7 @@ export default function QuizCreate() {
         course_id: courseId,
         created_by: user.id,
         title,
-        scheduled_at: scheduledAt,
+        scheduled_at: scheduledAtUTC,
         attempt_duration: attemptDuration,
         status: 'scheduled'
       }])
@@ -115,8 +126,40 @@ export default function QuizCreate() {
       return;
     }
 
+    // Send notifications to students and admins
+    // 1. Get enrolled students for the course
+    const { data: enrollments } = await supabase
+      .from('enrollments')
+      .select('student_id')
+      .eq('course_id', courseId);
+    const studentIds = enrollments ? enrollments.map((e: any) => e.student_id) : [];
+    if (studentIds.length > 0) {
+      await sendNotifications(
+        studentIds,
+        'New Quiz',
+        `A new quiz "${title}" has been added to your course.`,
+        'quiz',
+        '/quizzes'
+      );
+    }
+    // 2. Get all admins
+    const { data: admins } = await supabase
+      .from('profiles')
+      .select('id, name')
+      .eq('role', 'admin');
+    const adminIds = admins ? admins.map((a: any) => a.id) : [];
+    if (adminIds.length > 0) {
+      await sendNotifications(
+        adminIds,
+        'New Quiz Added',
+        `A new quiz has been added by ${profile?.name || 'a teacher'}.`,
+        'quiz',
+        '/quizzes'
+      );
+    }
+
     // Success!
-    alert('Quiz created successfully!');
+    toast({ title: 'Quiz created', description: 'Quiz created successfully!' });
     navigate('/quizzes');
   };
 

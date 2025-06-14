@@ -78,6 +78,15 @@ const CourseDetail = () => {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const discussionInputRef = useRef(null);
   const [currentPdfLessonId, setCurrentPdfLessonId] = useState<string | null>(null);
+  const [discussionUserProfiles, setDiscussionUserProfiles] = useState<Record<string, { avatar_url: string | null, name: string | null }>>({});
+  const [addResourceDialogOpen, setAddResourceDialogOpen] = useState(false);
+  const [newResourceTitle, setNewResourceTitle] = useState('');
+  const [newResourceFile, setNewResourceFile] = useState<File | null>(null);
+  const [resourceUploadLoading, setResourceUploadLoading] = useState(false);
+  const [resources, setResources] = useState([]);
+  const resourceFileInputRef = useRef(null);
+  const [deleteResourceId, setDeleteResourceId] = useState<string | null>(null);
+  const [deleteResourceLoading, setDeleteResourceLoading] = useState(false);
 
   // Fetch course details
   const { data: course, isLoading: isLoadingCourse } = useQuery({
@@ -851,7 +860,24 @@ const CourseDetail = () => {
         .select('*')
         .eq('course_id', courseId)
         .order('created_at', { ascending: true });
-      if (!error) setDiscussionMessages(data || []);
+      if (!error) {
+        setDiscussionMessages(data || []);
+        // Fetch all unique user profiles for discussion messages
+        const userIds = Array.from(new Set((data || []).map((msg: any) => msg.user_id)));
+        if (userIds.length > 0) {
+          const { data: profilesData } = await supabase
+            .from('profiles')
+            .select('id, avatar_url, name')
+            .in('id', userIds);
+          const profileMap: Record<string, { avatar_url: string | null, name: string | null }> = {};
+          (profilesData || []).forEach((profile: any) => {
+            profileMap[profile.id] = { avatar_url: profile.avatar_url, name: profile.name };
+          });
+          setDiscussionUserProfiles(profileMap);
+        } else {
+          setDiscussionUserProfiles({});
+        }
+      }
       setLoadingMessages(false);
     };
     fetchMessages();
@@ -878,6 +904,85 @@ const CourseDetail = () => {
         .eq('course_id', courseId)
         .order('created_at', { ascending: true });
       setDiscussionMessages(data || []);
+    }
+  };
+
+  // Add this function inside the CourseDetail component
+  const handleAddResource = async () => {
+    if (!newResourceTitle || !newResourceFile || !courseId || !user) return;
+    setResourceUploadLoading(true);
+    try {
+      // Upload PDF to Supabase Storage
+      const filePath = `course-${courseId}/${Date.now()}-${newResourceFile.name}`;
+      const { error: uploadError } = await supabase.storage.from('course-resources').upload(filePath, newResourceFile);
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage.from('course-resources').getPublicUrl(filePath);
+      const fileUrl = urlData?.publicUrl || '';
+      // Insert metadata into course_resources table
+      const { error: insertError } = await supabase.from('course_resources').insert({
+        course_id: courseId,
+        title: newResourceTitle,
+        file_url: fileUrl,
+        uploaded_by: user.id
+      });
+      if (insertError) throw insertError;
+      // Refresh resources list
+      fetchResources();
+      setAddResourceDialogOpen(false);
+      setNewResourceTitle('');
+      setNewResourceFile(null);
+      if (resourceFileInputRef.current) resourceFileInputRef.current.value = '';
+      toast({ title: 'Resource added', description: 'PDF uploaded successfully.' });
+    } catch (err: any) {
+      toast({ title: 'Error adding resource', description: err.message, variant: 'destructive' });
+    } finally {
+      setResourceUploadLoading(false);
+    }
+  };
+
+  // Fetch resources for this course
+  const fetchResources = async () => {
+    if (!courseId) return;
+    const { data, error } = await supabase
+      .from('course_resources')
+      .select('*')
+      .eq('course_id', courseId)
+      .order('created_at', { ascending: false });
+    if (!error) setResources(data || []);
+  };
+
+  useEffect(() => {
+    fetchResources();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId]);
+
+  // Add this function to handle resource deletion
+  const handleDeleteResource = async () => {
+    if (!deleteResourceId || !courseId) return;
+    setDeleteResourceLoading(true);
+    try {
+      // Find the resource to get the file path
+      const resource = resources.find((r: any) => r.id === deleteResourceId);
+      if (!resource) throw new Error('Resource not found');
+      // Extract file path from file_url
+      const url = new URL(resource.file_url);
+      const pathParts = url.pathname.split('/');
+      // Find the index of the bucket name
+      const bucketIndex = pathParts.findIndex(p => p === 'course-resources');
+      const filePath = pathParts.slice(bucketIndex + 1).join('/');
+      // Delete from storage
+      const { error: storageError } = await supabase.storage.from('course-resources').remove([filePath]);
+      if (storageError) throw storageError;
+      // Delete from table
+      const { error: dbError } = await supabase.from('course_resources').delete().eq('id', deleteResourceId);
+      if (dbError) throw dbError;
+      setDeleteResourceId(null);
+      fetchResources();
+      toast({ title: 'Resource deleted' });
+    } catch (err: any) {
+      toast({ title: 'Error deleting resource', description: err.message, variant: 'destructive' });
+    } finally {
+      setDeleteResourceLoading(false);
     }
   };
 
@@ -1196,15 +1301,82 @@ const CourseDetail = () => {
         
         <TabsContent value="resources" className="animate-fade-in">
           <div className="space-y-4">
+            {profile?.role === 'teacher' && course.instructor_id === user?.id && (
+              <>
+                <Button className="mb-4" onClick={() => setAddResourceDialogOpen(true)}>
+                  Add Resource
+                </Button>
+                <Dialog open={addResourceDialogOpen} onOpenChange={setAddResourceDialogOpen}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add Resource</DialogTitle>
+                    </DialogHeader>
+                    {/* Form for uploading PDF and entering title */}
+                    <Input
+                      className="mb-2"
+                      placeholder="Resource Title"
+                      value={newResourceTitle}
+                      onChange={e => setNewResourceTitle(e.target.value)}
+                    />
+                    <Input
+                      className="mb-2"
+                      type="file"
+                      accept="application/pdf"
+                      ref={resourceFileInputRef}
+                      onChange={e => setNewResourceFile(e.target.files?.[0] || null)}
+                    />
+                    {newResourceFile && <div className="text-xs mb-2">Selected: {newResourceFile.name}</div>}
+                    <Button
+                      className="w-full"
+                      onClick={handleAddResource}
+                      disabled={resourceUploadLoading || !newResourceTitle || !newResourceFile}
+                    >
+                      {resourceUploadLoading ? 'Uploading...' : 'Add Resource'}
+                    </Button>
+                  </DialogContent>
+                </Dialog>
+              </>
+            )}
             <div className="p-4 border rounded-lg">
               <h3 className="font-medium mb-4">Course Materials</h3>
               <ul className="space-y-2">
-                <li className="flex items-center justify-between p-2 hover:bg-muted/20 rounded">
-                  <div className="flex items-center">
-                    <BookOpen className="w-4 h-4 mr-2 text-brightmind-blue" />
-                    <span>No materials uploaded yet.</span>
-                  </div>
-                </li>
+                {resources.length === 0 ? (
+                  <li className="flex items-center justify-between p-2 hover:bg-muted/20 rounded">
+                    <div className="flex items-center">
+                      <BookOpen className="w-4 h-4 mr-2 text-brightmind-blue" />
+                      <span>No materials uploaded yet.</span>
+                    </div>
+                  </li>
+                ) : (
+                  resources.map(resource => (
+                    <li key={resource.id} className="flex items-center justify-between p-2 hover:bg-muted/20 rounded">
+                      <div className="flex items-center">
+                        <BookOpen className="w-4 h-4 mr-2 text-brightmind-blue" />
+                        <span>{resource.title}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={resource.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 underline text-sm"
+                        >
+                          Download
+                        </a>
+                        {profile?.role === 'teacher' && course.instructor_id === user?.id && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setDeleteResourceId(resource.id)}
+                            disabled={deleteResourceLoading}
+                          >
+                            Delete
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  ))
+                )}
               </ul>
             </div>
           </div>
@@ -1223,17 +1395,29 @@ const CourseDetail = () => {
                 {discussionMessages.length === 0 ? (
                   <div className="text-center text-muted-foreground">No messages yet. Start the conversation!</div>
                 ) : (
-                  discussionMessages.map(msg => (
-                    <div key={msg.id} className="bg-white/80 border border-gray-200 rounded-lg p-3">
-                      <div className="text-sm font-semibold text-brightmind-blue">{msg.user_name}</div>
-                      <div className="text-base mt-1">{msg.message}</div>
-                      <div className="text-xs text-gray-400 mt-1">{new Date(msg.created_at).toLocaleString()}</div>
-                    </div>
-                  ))
+                  discussionMessages.map(msg => {
+                    const profile = discussionUserProfiles[msg.user_id] || {};
+                    const avatarUrl = profile.avatar_url || "/placeholder.svg";
+                    const name = profile.name || msg.user_name || "User";
+                    const initials = name.split(' ').map((n: string) => n[0]).join('').toUpperCase();
+                    return (
+                      <div key={msg.id} className="bg-white/80 border border-gray-200 rounded-lg p-3 flex items-start gap-3">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={avatarUrl} alt={name} />
+                          <AvatarFallback>{initials}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="text-sm font-semibold text-brightmind-blue">{name}</div>
+                          <div className="text-base mt-1">{msg.message}</div>
+                          <div className="text-xs text-gray-400 mt-1">{new Date(msg.created_at).toLocaleString()}</div>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             )}
-            {enrollment ? (
+            {(enrollment || (profile?.role === 'teacher' && course.instructor_id === user?.id)) ? (
               <div className="flex gap-2 mt-2">
                 <Input
                   ref={discussionInputRef}
@@ -1392,10 +1576,13 @@ const CourseDetail = () => {
       </Dialog>
 
       {/* Edit Lesson Dialog */}
-      <Dialog open={editLessonDialogOpen} onOpenChange={(open) => { setEditLessonDialogOpen(open); if (!open) setEditItem(null); }}>
+      <Dialog open={editLessonDialogOpen} onOpenChange={(open) => { 
+        setEditLessonDialogOpen(open); 
+        if (!open) setEditItem(null); 
+      }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Lesson</DialogTitle></DialogHeader>
-          {editItem && (
+          {editItem && typeof editItem === 'object' && (
             <>
               <select className="w-full mb-2" value={editItem.module_id} onChange={e => setEditItem({ ...editItem, module_id: e.target.value })}>
                 <option value="">Select Module</option>
@@ -1417,7 +1604,7 @@ const CourseDetail = () => {
                 </div>
               )}
               <Input className="mt-2" type="number" min="1" placeholder="Duration (minutes)" value={editItem.duration} onChange={e => setEditItem({ ...editItem, duration: e.target.value ? parseInt(e.target.value, 10) : null })} />
-              <Button className="mt-4 w-full" onClick={() => { updateLessonMutation.mutate(editItem); setEditLessonDialogOpen(false); setEditItem(null); }} disabled={updateLessonMutation.isPending}>Save</Button>
+              <Button className="mt-4 w-full" onClick={() => { if (editItem) updateLessonMutation.mutate(editItem); setEditLessonDialogOpen(false); setEditItem(null); }} disabled={updateLessonMutation.isPending}>Save</Button>
             </>
           )}
         </DialogContent>
@@ -1427,7 +1614,7 @@ const CourseDetail = () => {
       <Dialog open={editModuleDialogOpen} onOpenChange={(open) => { setEditModuleDialogOpen(open); if (!open) setEditItem(null); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Module</DialogTitle></DialogHeader>
-          {editItem && (
+          {editItem && typeof editItem === 'object' && (
             <>
               <Input placeholder="Module Title" value={editItem.title} onChange={e => setEditItem({ ...editItem, title: e.target.value })} />
               <Button className="mt-4 w-full" onClick={() => { if (editItem) updateModuleMutation.mutate(editItem); setEditModuleDialogOpen(false); setEditItem(null); }}>Save</Button>
@@ -1440,7 +1627,7 @@ const CourseDetail = () => {
       <Dialog open={editAssignmentDialogOpen} onOpenChange={(open) => { setEditAssignmentDialogOpen(open); if (!open) setEditItem(null); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Assignment</DialogTitle></DialogHeader>
-          {editItem && (
+          {editItem && typeof editItem === 'object' && (
             <>
               <Input placeholder="Assignment Title" value={editItem.title} onChange={e => setEditItem({ ...editItem, title: e.target.value })} />
               <Input type="date" className="mt-2" value={editItem.due_date} onChange={e => setEditItem({ ...editItem, due_date: e.target.value })} />
@@ -1454,7 +1641,7 @@ const CourseDetail = () => {
       <Dialog open={editLiveClassDialogOpen} onOpenChange={(open) => { setEditLiveClassDialogOpen(open); if (!open) setEditItem(null); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Live Class</DialogTitle></DialogHeader>
-          {editItem && (
+          {editItem && typeof editItem === 'object' && (
             <>
               <Input placeholder="Title" value={editItem.title} onChange={e => setEditItem({ ...editItem, title: e.target.value })} />
               <Input type="datetime-local" className="mt-2" value={editItem.start_time} onChange={e => setEditItem({ ...editItem, start_time: e.target.value })} />
@@ -1511,6 +1698,20 @@ const CourseDetail = () => {
               allow="autoplay"
               title="PDF Lesson"
             ></iframe>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Resource Confirmation Dialog */}
+      <Dialog open={!!deleteResourceId} onOpenChange={open => { if (!open) setDeleteResourceId(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Delete Resource</DialogTitle></DialogHeader>
+          <p>Are you sure you want to delete this resource? This cannot be undone.</p>
+          <div className="flex gap-2 mt-4">
+            <Button variant="destructive" onClick={handleDeleteResource} disabled={deleteResourceLoading}>
+              {deleteResourceLoading ? 'Deleting...' : 'Delete'}
+            </Button>
+            <Button onClick={() => setDeleteResourceId(null)} disabled={deleteResourceLoading}>Cancel</Button>
           </div>
         </DialogContent>
       </Dialog>
