@@ -4,7 +4,7 @@ const SYSTEM_PROMPT = ` You are a helpful AI assistant for an O/A Level learning
 
 const API_ENDPOINT = "https://models.github.ai/inference";
 const MODEL = "openai/gpt-4.1";
-const API_TOKEN = "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"; // <-- Place your token here
+const API_TOKEN = import.meta.env.VITE_GITHUB_API_TOKEN;
 
 const Assistant: React.FC = () => {
   const [messages, setMessages] = useState([
