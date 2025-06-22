@@ -30,6 +30,7 @@ import AdminDashboard from "@/pages/admin/AdminDashboard";
 import NotFound from "@/pages/NotFound";
 import RequireAuth from "@/components/auth/RequireAuth";
 import Unauthorized from "@/pages/Unauthorized";
+import RootRedirect from "@/components/auth/RootRedirect";
 
 import QuizList from '@/pages/quizzes/QuizList';
 import QuizCreate from '@/pages/quizzes/QuizCreate';
@@ -60,7 +61,7 @@ const App = () => (
           <Route path="/" element={
             <RequireAuth>
               <SidebarLayout>
-                <Dashboard />
+                <RootRedirect />
               </SidebarLayout>
             </RequireAuth>
           } />

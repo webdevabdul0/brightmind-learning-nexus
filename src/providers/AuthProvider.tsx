@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, Profile } from '@/integrations/supabase/client';
@@ -48,6 +47,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Error fetching profile:', error);
     }
   };
+
+  useEffect(() => {
+    if (profile?.role === 'admin' && location.pathname === '/') {
+      navigate('/admin', { replace: true });
+    }
+  }, [profile, location, navigate]);
 
   useEffect(() => {
     // Set up auth state listener
