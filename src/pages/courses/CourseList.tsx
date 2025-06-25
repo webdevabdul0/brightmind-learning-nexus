@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/hooks/use-toast';
 import { useCourseProgress } from '@/hooks/useCourseProgress';
+import { loadStripe } from '@stripe/stripe-js';
 
 const COURSE_COLORS = [
   'bg-brightmind-purple text-white',
@@ -201,6 +202,39 @@ const CourseList = () => {
         return;
       }
 
+      // Find the course object
+      const course = courses.find((c: any) => c.id === courseId);
+      if (!course) {
+        toast({
+          title: "Course not found",
+          description: "Could not find the selected course.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      if (course.price && course.price > 0) {
+        // Paid course: initiate Stripe Checkout
+        const stripe = await loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+        const response = await fetch('/.netlify/functions/create-checkout-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courseId: course.id, price: course.price, userId: user.id })
+        });
+        const data = await response.json();
+        if (response.ok && data.url) {
+          window.location.href = data.url;
+        } else {
+          toast({
+            title: "Payment failed",
+            description: data.error || 'Could not initiate payment.',
+            variant: "destructive"
+          });
+        }
+        return;
+      }
+
+      // Free course: enroll directly
       const { error } = await supabase
         .from('enrollments')
         .insert({
@@ -222,11 +256,15 @@ const CourseList = () => {
         title: "Enrollment successful",
         description: "You have successfully enrolled in the course",
       });
-      
       // Refresh enrollments data
       navigate(`/courses/${courseId}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error enrolling in course:", error);
+      toast({
+        title: "Enrollment error",
+        description: error.message || String(error),
+        variant: "destructive"
+      });
     }
   };
 
