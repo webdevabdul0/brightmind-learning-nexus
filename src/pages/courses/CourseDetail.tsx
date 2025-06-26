@@ -707,19 +707,33 @@ const CourseDetail = () => {
     if (course.price && course.price > 0) {
       // Paid course: initiate Stripe Checkout
       try {
-        const stripe = await loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
-        const response = await fetch('/.netlify/functions/create-checkout-session', {
+        const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+        if (!stripeKey) {
+          toast({
+            title: "Stripe key missing",
+            description: "Stripe publishable key is not set. Please contact support.",
+            variant: "destructive"
+          });
+          return;
+        }
+        const stripe = await loadStripe(stripeKey);
+        const response = await fetch('https://brighthubmind.netlify.app/.netlify/functions/create-checkout-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ courseId: course.id, price: course.price, userId: user.id })
         });
-        const data = await response.json();
+        let data: any = {};
+        try {
+          data = await response.json();
+        } catch (e) {
+          data = {};
+        }
         if (response.ok && data.url) {
           window.location.href = data.url;
         } else {
           toast({
             title: "Payment failed",
-            description: data.error || 'Could not initiate payment.',
+            description: data.error || 'Could not initiate payment. Please try again later.',
             variant: "destructive"
           });
         }
