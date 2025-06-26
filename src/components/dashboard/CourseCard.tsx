@@ -1,5 +1,6 @@
 import { MoreVertical, BookOpen, User2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 interface CourseProgress {
   completed: number;
@@ -17,6 +18,7 @@ interface CourseCardProps {
   isLoadingEnrollments?: boolean;
   userRole?: string;
   onEnroll?: (courseId: string, e: React.MouseEvent) => void;
+  price?: number | null;
 }
 
 const CourseCard = ({ 
@@ -29,15 +31,23 @@ const CourseCard = ({
   isEnrolled = false,
   isLoadingEnrollments = false,
   userRole = '',
-  onEnroll
+  onEnroll,
+  price = null
 }: CourseCardProps) => {
   const progressPercent = progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0;
+  const isPremium = price && price > 0;
   
   return (
     <div 
       className={`rounded-xl p-4 sm:p-6 relative overflow-hidden cursor-pointer transform transition-all hover:translate-y-[-5px] duration-300 ${color}`}
       onClick={onClick}
     >
+      {/* Premium badge */}
+      {isPremium && (
+        <Badge className="absolute top-4 right-4 bg-yellow-400 text-yellow-900 font-bold shadow px-3 py-1 z-10" style={{fontSize: '0.85rem'}}>
+          Premium
+        </Badge>
+      )}
       <div className="flex justify-between items-start mb-4">
         <div className="pr-8">
           <h3 className="font-bold text-base sm:text-lg mb-1 line-clamp-2 flex items-center gap-2">

@@ -14,7 +14,8 @@ import {
   Calendar,
   Loader2,
   Pencil,
-  Trash
+  Trash,
+  Lock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -88,6 +89,11 @@ const CourseDetail = () => {
   const resourceFileInputRef = useRef(null);
   const [deleteResourceId, setDeleteResourceId] = useState<string | null>(null);
   const [deleteResourceLoading, setDeleteResourceLoading] = useState(false);
+  // Add state for withdraw dialog
+  const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
+  // Add state for locked lesson modal
+  const [lockedModalOpen, setLockedModalOpen] = useState(false);
 
   // Fetch course details
   const { data: course, isLoading: isLoadingCourse } = useQuery({
@@ -704,50 +710,50 @@ const CourseDetail = () => {
       });
       return;
     }
-    if (course.price && course.price > 0) {
-      // Paid course: initiate Stripe Checkout
-      try {
-        const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-        if (!stripeKey) {
-          toast({
-            title: "Stripe key missing",
-            description: "Stripe publishable key is not set. Please contact support.",
-            variant: "destructive"
-          });
-          return;
-        }
-        const stripe = await loadStripe(stripeKey);
-        const response = await fetch('https://brighthubmind.netlify.app/.netlify/functions/create-checkout-session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ courseId: course.id, price: course.price, userId: user.id })
-        });
-        let data: any = {};
-        try {
-          data = await response.json();
-        } catch (e) {
-          data = {};
-        }
-        if (response.ok && data.url) {
-          window.location.href = data.url;
-        } else {
-          toast({
-            title: "Payment failed",
-            description: data.error || 'Could not initiate payment. Please try again later.',
-            variant: "destructive"
-          });
-        }
-      } catch (error) {
+    // Always enroll, regardless of price
+    enrollMutation.mutate();
+  };
+
+  const handleBuyPremium = async () => {
+    if (!user || !course) return;
+    try {
+      const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+      if (!stripeKey) {
         toast({
-          title: "Payment error",
-          description: error.message || String(error),
+          title: "Stripe key missing",
+          description: "Stripe publishable key is not set. Please contact support.",
+          variant: "destructive"
+        });
+        return;
+      }
+      const stripe = await loadStripe(stripeKey);
+      const response = await fetch('https://brighthubmind.netlify.app/.netlify/functions/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courseId: course.id, price: course.price, userId: user.id })
+      });
+      let data: any = {};
+      try {
+        data = await response.json();
+      } catch (e) {
+        data = {};
+      }
+      if (response.ok && data.url) {
+        window.location.href = data.url;
+      } else {
+        toast({
+          title: "Payment failed",
+          description: data.error || 'Could not initiate payment. Please try again later.',
           variant: "destructive"
         });
       }
-      return;
+    } catch (error: any) {
+      toast({
+        title: "Payment error",
+        description: error.message || String(error),
+        variant: "destructive"
+      });
     }
-    // Free course: enroll directly
-    enrollMutation.mutate();
   };
 
   const handleCloseVideo = () => {
@@ -1037,6 +1043,28 @@ const CourseDetail = () => {
     }
   };
 
+  // Withdraw handler
+  const handleWithdraw = async () => {
+    if (!user || !courseId) return;
+    setWithdrawing(true);
+    try {
+      const { error } = await supabase
+        .from('enrollments')
+        .delete()
+        .eq('student_id', user.id)
+        .eq('course_id', courseId);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['enrollment', courseId, user?.id] });
+      toast({ title: 'Withdrawn', description: 'You have withdrawn from this course.' });
+      setWithdrawDialogOpen(false);
+      // Optionally, redirect or update UI
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
   // Loading states
   if (isLoadingCourse) {
     return (
@@ -1075,7 +1103,7 @@ const CourseDetail = () => {
   
   // Format currency
   const formatCurrency = (price: number | null) => {
-    if (price === null) return 'Free';
+    if (price === null || price === 0) return 'Free';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD'
@@ -1092,6 +1120,67 @@ const CourseDetail = () => {
   };
 
   const bgColor = categoryColors[course.category] || 'bg-brightmind-blue text-white';
+
+  // Pricing/features model for non-enrolled students
+  const renderPricingModel = () => (
+    <div className="flex flex-col items-center justify-center bg-white rounded-xl shadow-lg p-8 my-8 max-w-2xl mx-auto animate-fade-in">
+      <h2 className="text-2xl font-bold mb-2">Unlock Premium Access</h2>
+      <p className="mb-6 text-muted-foreground text-center max-w-lg">
+        Enroll in this course to access all premium features and maximize your learning experience!
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full mb-6">
+        <div className="bg-muted/30 rounded-lg p-4 flex flex-col items-center">
+          <h3 className="font-semibold text-lg mb-2">Free</h3>
+          <ul className="text-sm text-muted-foreground space-y-2">
+            <li>✔️ Course overview</li>
+            <li>✔️ Introduction video (if available)</li>
+          </ul>
+        </div>
+        <div className="bg-brightmind-blue text-white rounded-lg p-4 flex flex-col items-center">
+          <h3 className="font-semibold text-lg mb-2">Premium</h3>
+          <ul className="text-sm space-y-2">
+            <li>✔️ All course content & lessons</li>
+            <li>✔️ Assignments</li>
+            <li>✔️ Quizzes</li>
+            <li>✔️ Live Classes</li>
+            <li>✔️ Resources & Downloads</li>
+            <li>✔️ Discussions</li>
+            <li>✔️ Attendance Tracking</li>
+          </ul>
+        </div>
+      </div>
+      <Button 
+        className="mt-2 px-8 py-3 text-lg font-semibold"
+        onClick={handleEnroll}
+        disabled={enrollMutation.isPending}
+      >
+        {enrollMutation.isPending ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Processing...
+          </>
+        ) : (
+          <>Enroll Now - {formatCurrency(course.price)}</>
+        )}
+      </Button>
+    </div>
+  );
+
+  // Helper to check if course is paid
+  const isPaidCourse = course?.price && course.price > 0;
+  // Helper to check if student has premium access (assume 'is_paid' or 'premium' flag in enrollment)
+  const hasPremium = !!enrollment && (enrollment.is_paid || enrollment.premium);
+
+  // Banner for limited access in paid courses
+  const renderLimitedAccessBanner = () => (
+    <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded mb-6 flex flex-col items-center">
+      <div className="font-semibold mb-2">This course has limited access</div>
+      <div className="mb-2 text-center">You are enrolled, but premium features are locked. Buy premium to get full access to assignments, quizzes, live classes, resources, discussions, and attendance.</div>
+      <Button className="mt-2" onClick={handleBuyPremium} disabled={enrollMutation.isPending}>
+        {enrollMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Buy Premium'}
+      </Button>
+    </div>
+  );
 
   return (
     <div className="container mx-auto animate-fade-in">
@@ -1213,7 +1302,79 @@ const CourseDetail = () => {
         </TabsList>
         
         <TabsContent value="content" className="animate-fade-in">
-          {isLoadingModules ? (
+          {profile?.role === 'student' && enrollment && isPaidCourse && !hasPremium ? (
+            <>
+              {renderLimitedAccessBanner()}
+              {/* Show all lessons in first module, lock the rest */}
+              <div className="space-y-6">
+                {modules.map((module, index) => (
+                  <div key={module.id} className="bg-white rounded-lg shadow-sm overflow-hidden">
+                    <div className="bg-secondary p-4">
+                      <h3 className="font-semibold text-lg">Module {index + 1}: {module.title}</h3>
+                    </div>
+                    <div className="divide-y">
+                      {module.lessons.map((lesson: any) => {
+                        const isCompleted = completedLessonIds.includes(lesson.id);
+                        const isUnlocked = index === 0; // Only first module is unlocked
+                        return (
+                          <div
+                            key={lesson.id}
+                            className={`p-4 transition-colors flex items-center justify-between ${isUnlocked ? 'hover:bg-muted/20 cursor-pointer' : 'bg-gray-100 opacity-60 cursor-not-allowed'}`}
+                            onClick={isUnlocked ? () => handleStartLesson(lesson) : () => setLockedModalOpen(true)}
+                          >
+                            <div className="flex items-center">
+                              {lesson.type === 'video' ? (
+                                <Video className="w-5 h-5 mr-3 text-brightmind-blue" />
+                              ) : lesson.type === 'pdf' ? (
+                                <FileText className="w-5 h-5 mr-3 text-brightmind-purple" />
+                              ) : (
+                                <FileText className="w-5 h-5 mr-3 text-brightmind-purple" />
+                              )}
+                              <div>
+                                <div className="flex items-center">
+                                  <span className="font-medium">{lesson.title}</span>
+                                  {isCompleted && isUnlocked && (
+                                    <CheckCircle2 className="w-4 h-4 ml-2 text-green-500" />
+                                  )}
+                                  {!isUnlocked && (
+                                    <span className="ml-2 text-yellow-600 flex items-center"><Lock className="w-4 h-4 mr-1" /> Premium</span>
+                                  )}
+                                </div>
+                                <div className="text-sm text-muted-foreground flex items-center mt-1">
+                                  <Clock className="w-3 h-3 mr-1" />
+                                  <span>{lesson.duration || 'N/A'} min</span>
+                                </div>
+                                {lesson.type === 'text' && lesson.content && isUnlocked && (
+                                  <div className="prose max-w-none mt-2" dangerouslySetInnerHTML={{ __html: lesson.content }} />
+                                )}
+                              </div>
+                            </div>
+                            {lesson.type === 'pdf' && lesson.pdf_url && profile?.role === 'student' && isUnlocked && (
+                              <Button size="sm" className="ml-4" onClick={e => { e.stopPropagation(); setCurrentPdfUrl(lesson.pdf_url); setCurrentPdfLessonId(lesson.id); setPdfDialogOpen(true); }}>
+                                View PDF
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Locked lesson modal */}
+              <Dialog open={lockedModalOpen} onOpenChange={setLockedModalOpen}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Premium Content</DialogTitle>
+                  </DialogHeader>
+                  <p>This lesson is part of the premium course. Buy premium to unlock all modules and lessons!</p>
+                  <Button className="mt-4" onClick={handleBuyPremium}>Buy Premium</Button>
+                </DialogContent>
+              </Dialog>
+            </>
+          ) : profile?.role === 'student' && !enrollment ? (
+            renderPricingModel()
+          ) : isLoadingModules ? (
             <div className="space-y-6">
               {[1, 2, 3].map(i => (
                 <Skeleton key={i} className="h-40 w-full" />
@@ -1307,7 +1468,11 @@ const CourseDetail = () => {
         </TabsContent>
         
         <TabsContent value="assignments" className="animate-fade-in">
-          {isLoadingAssignments ? (
+          {profile?.role === 'student' && enrollment && isPaidCourse && !hasPremium ? (
+            <>{renderLimitedAccessBanner()}</>
+          ) : profile?.role === 'student' && !enrollment ? (
+            renderPricingModel()
+          ) : isLoadingAssignments ? (
             <div className="space-y-4">
               {[1, 2, 3].map(i => (
                 <Skeleton key={i} className="h-24 w-full" />
@@ -1351,139 +1516,151 @@ const CourseDetail = () => {
         </TabsContent>
         
         <TabsContent value="resources" className="animate-fade-in">
-          <div className="space-y-4">
-            {profile?.role === 'teacher' && course.instructor_id === user?.id && (
-              <>
-                <Button className="mb-4" onClick={() => setAddResourceDialogOpen(true)}>
-                  Add Resource
-                </Button>
-                <Dialog open={addResourceDialogOpen} onOpenChange={setAddResourceDialogOpen}>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Add Resource</DialogTitle>
-                    </DialogHeader>
-                    {/* Form for uploading PDF and entering title */}
-                    <Input
-                      className="mb-2"
-                      placeholder="Resource Title"
-                      value={newResourceTitle}
-                      onChange={e => setNewResourceTitle(e.target.value)}
-                    />
-                    <Input
-                      className="mb-2"
-                      type="file"
-                      accept="application/pdf"
-                      ref={resourceFileInputRef}
-                      onChange={e => setNewResourceFile(e.target.files?.[0] || null)}
-                    />
-                    {newResourceFile && <div className="text-xs mb-2">Selected: {newResourceFile.name}</div>}
-                    <Button
-                      className="w-full"
-                      onClick={handleAddResource}
-                      disabled={resourceUploadLoading || !newResourceTitle || !newResourceFile}
-                    >
-                      {resourceUploadLoading ? 'Uploading...' : 'Add Resource'}
-                    </Button>
-                  </DialogContent>
-                </Dialog>
-              </>
-            )}
-            <div className="p-4 border rounded-lg">
-              <h3 className="font-medium mb-4">Course Materials</h3>
-              <ul className="space-y-2">
-                {resources.length === 0 ? (
-                  <li className="flex items-center justify-between p-2 hover:bg-muted/20 rounded">
-                    <div className="flex items-center">
-                      <BookOpen className="w-4 h-4 mr-2 text-brightmind-blue" />
-                      <span>No materials uploaded yet.</span>
-                    </div>
-                  </li>
-                ) : (
-                  resources.map(resource => (
-                    <li key={resource.id} className="flex items-center justify-between p-2 hover:bg-muted/20 rounded">
+          {profile?.role === 'student' && enrollment && isPaidCourse && !hasPremium ? (
+            <>{renderLimitedAccessBanner()}</>
+          ) : profile?.role === 'student' && !enrollment ? (
+            renderPricingModel()
+          ) : (
+            <div className="space-y-4">
+              {profile?.role === 'teacher' && course.instructor_id === user?.id && (
+                <>
+                  <Button className="mb-4" onClick={() => setAddResourceDialogOpen(true)}>
+                    Add Resource
+                  </Button>
+                  <Dialog open={addResourceDialogOpen} onOpenChange={setAddResourceDialogOpen}>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Add Resource</DialogTitle>
+                      </DialogHeader>
+                      {/* Form for uploading PDF and entering title */}
+                      <Input
+                        className="mb-2"
+                        placeholder="Resource Title"
+                        value={newResourceTitle}
+                        onChange={e => setNewResourceTitle(e.target.value)}
+                      />
+                      <Input
+                        className="mb-2"
+                        type="file"
+                        accept="application/pdf"
+                        ref={resourceFileInputRef}
+                        onChange={e => setNewResourceFile(e.target.files?.[0] || null)}
+                      />
+                      {newResourceFile && <div className="text-xs mb-2">Selected: {newResourceFile.name}</div>}
+                      <Button
+                        className="w-full"
+                        onClick={handleAddResource}
+                        disabled={resourceUploadLoading || !newResourceTitle || !newResourceFile}
+                      >
+                        {resourceUploadLoading ? 'Uploading...' : 'Add Resource'}
+                      </Button>
+                    </DialogContent>
+                  </Dialog>
+                </>
+              )}
+              <div className="p-4 border rounded-lg">
+                <h3 className="font-medium mb-4">Course Materials</h3>
+                <ul className="space-y-2">
+                  {resources.length === 0 ? (
+                    <li className="flex items-center justify-between p-2 hover:bg-muted/20 rounded">
                       <div className="flex items-center">
                         <BookOpen className="w-4 h-4 mr-2 text-brightmind-blue" />
-                        <span>{resource.title}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <a
-                          href={resource.file_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 underline text-sm"
-                        >
-                          Download
-                        </a>
-                        {profile?.role === 'teacher' && course.instructor_id === user?.id && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => setDeleteResourceId(resource.id)}
-                            disabled={deleteResourceLoading}
-                          >
-                            Delete
-                          </Button>
-                        )}
+                        <span>No materials uploaded yet.</span>
                       </div>
                     </li>
-                  ))
-                )}
-              </ul>
+                  ) : (
+                    resources.map(resource => (
+                      <li key={resource.id} className="flex items-center justify-between p-2 hover:bg-muted/20 rounded">
+                        <div className="flex items-center">
+                          <BookOpen className="w-4 h-4 mr-2 text-brightmind-blue" />
+                          <span>{resource.title}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={resource.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 underline text-sm"
+                          >
+                            Download
+                          </a>
+                          {profile?.role === 'teacher' && course.instructor_id === user?.id && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => setDeleteResourceId(resource.id)}
+                              disabled={deleteResourceLoading}
+                            >
+                              Delete
+                            </Button>
+                          )}
+                        </div>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </div>
             </div>
-          </div>
+          )}
         </TabsContent>
         
         <TabsContent value="discussions" className="animate-fade-in">
-          <div className="p-4 md:p-8 bg-muted/20 rounded-lg max-w-2xl mx-auto">
-            <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
-              <Users className="h-6 w-6 text-muted-foreground" />
-              Course Discussions
-            </h3>
-            {loadingMessages ? (
-              <div className="text-center text-muted-foreground">Loading messages...</div>
-            ) : (
-              <div className="space-y-4 max-h-80 overflow-y-auto mb-4">
-                {discussionMessages.length === 0 ? (
-                  <div className="text-center text-muted-foreground">No messages yet. Start the conversation!</div>
-                ) : (
-                  discussionMessages.map(msg => {
-                    const profile = discussionUserProfiles[msg.user_id] || {};
-                    const avatarUrl = profile.avatar_url || "/placeholder.svg";
-                    const name = profile.name || msg.user_name || "User";
-                    const initials = name.split(' ').map((n: string) => n[0]).join('').toUpperCase();
-                    return (
-                      <div key={msg.id} className="bg-white/80 border border-gray-200 rounded-lg p-3 flex items-start gap-3">
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={avatarUrl} alt={name} />
-                          <AvatarFallback>{initials}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1">
-                          <div className="text-sm font-semibold text-brightmind-blue">{name}</div>
-                          <div className="text-base mt-1">{msg.message}</div>
-                          <div className="text-xs text-gray-400 mt-1">{new Date(msg.created_at).toLocaleString()}</div>
+          {profile?.role === 'student' && enrollment && isPaidCourse && !hasPremium ? (
+            <>{renderLimitedAccessBanner()}</>
+          ) : profile?.role === 'student' && !enrollment ? (
+            renderPricingModel()
+          ) : (
+            <div className="p-4 md:p-8 bg-muted/20 rounded-lg max-w-2xl mx-auto">
+              <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
+                <Users className="h-6 w-6 text-muted-foreground" />
+                Course Discussions
+              </h3>
+              {loadingMessages ? (
+                <div className="text-center text-muted-foreground">Loading messages...</div>
+              ) : (
+                <div className="space-y-4 max-h-80 overflow-y-auto mb-4">
+                  {discussionMessages.length === 0 ? (
+                    <div className="text-center text-muted-foreground">No messages yet. Start the conversation!</div>
+                  ) : (
+                    discussionMessages.map(msg => {
+                      const profile = discussionUserProfiles[msg.user_id] || {};
+                      const avatarUrl = profile.avatar_url || "/placeholder.svg";
+                      const name = profile.name || msg.user_name || "User";
+                      const initials = name.split(' ').map((n: string) => n[0]).join('').toUpperCase();
+                      return (
+                        <div key={msg.id} className="bg-white/80 border border-gray-200 rounded-lg p-3 flex items-start gap-3">
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={avatarUrl} alt={name} />
+                            <AvatarFallback>{initials}</AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1">
+                            <div className="text-sm font-semibold text-brightmind-blue">{name}</div>
+                            <div className="text-base mt-1">{msg.message}</div>
+                            <div className="text-xs text-gray-400 mt-1">{new Date(msg.created_at).toLocaleString()}</div>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
-            {(enrollment || (profile?.role === 'teacher' && course.instructor_id === user?.id)) ? (
-              <div className="flex gap-2 mt-2">
-                <Input
-                  ref={discussionInputRef}
-                  value={newMessage}
-                  onChange={e => setNewMessage(e.target.value)}
-                  placeholder="Type your message..."
-                  onKeyDown={e => { if (e.key === 'Enter') handleSendMessage(); }}
-                  className="flex-1"
-                />
-                <Button onClick={handleSendMessage} disabled={!newMessage.trim()}>Send</Button>
-              </div>
-            ) : (
-              <div className="text-center text-muted-foreground mt-4">Enroll in this course to join the discussion.</div>
-            )}
-          </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+              {(enrollment || (profile?.role === 'teacher' && course.instructor_id === user?.id)) ? (
+                <div className="flex gap-2 mt-2">
+                  <Input
+                    ref={discussionInputRef}
+                    value={newMessage}
+                    onChange={e => setNewMessage(e.target.value)}
+                    placeholder="Type your message..."
+                    onKeyDown={e => { if (e.key === 'Enter') handleSendMessage(); }}
+                    className="flex-1"
+                  />
+                  <Button onClick={handleSendMessage} disabled={!newMessage.trim()}>Send</Button>
+                </div>
+              ) : (
+                <div className="text-center text-muted-foreground mt-4">Enroll in this course to join the discussion.</div>
+              )}
+            </div>
+          )}
         </TabsContent>
 
         {profile?.role === 'teacher' && course.instructor_id === user?.id && (
@@ -1766,6 +1943,30 @@ const CourseDetail = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {enrollment && profile?.role === 'student' && (
+        <div className="mt-4">
+          <Button variant="destructive" onClick={() => setWithdrawDialogOpen(true)} disabled={withdrawing}>
+            {withdrawing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Withdraw from Course
+          </Button>
+          <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Withdraw from Course</DialogTitle>
+              </DialogHeader>
+              <p>Are you sure you want to withdraw from this course? You will lose access to all premium content and your progress will be lost.</p>
+              <div className="flex gap-2 mt-4 justify-end">
+                <Button variant="outline" onClick={() => setWithdrawDialogOpen(false)} disabled={withdrawing}>Cancel</Button>
+                <Button variant="destructive" onClick={handleWithdraw} disabled={withdrawing}>
+                  {withdrawing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Yes, Withdraw
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      )}
     </div>
   );
 };

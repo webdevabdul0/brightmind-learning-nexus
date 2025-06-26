@@ -305,6 +305,7 @@ const CourseList = () => {
         isLoadingEnrollments={isLoadingEnrollments}
         userRole={profile?.role}
         onEnroll={onEnroll}
+        price={course.price}
       />
     );
   };
