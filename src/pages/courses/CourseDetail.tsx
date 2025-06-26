@@ -31,6 +31,7 @@ import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { useCourseProgress } from '@/hooks/useCourseProgress';
 import { AttendanceTab, StudentAttendanceView } from '@/components/AttendanceTab';
+import { loadStripe } from '@stripe/stripe-js';
 
 const CourseDetail = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -685,7 +686,7 @@ const CourseDetail = () => {
     markLessonCompletedMutation.mutate(lessonId);
   };
 
-  const handleEnroll = () => {
+  const handleEnroll = async () => {
     if (!user) {
       toast({
         title: "Authentication required",
@@ -695,7 +696,43 @@ const CourseDetail = () => {
       navigate('/login');
       return;
     }
-    
+    if (!course) {
+      toast({
+        title: "Course not found",
+        description: "Could not find the selected course.",
+        variant: "destructive"
+      });
+      return;
+    }
+    if (course.price && course.price > 0) {
+      // Paid course: initiate Stripe Checkout
+      try {
+        const stripe = await loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+        const response = await fetch('/.netlify/functions/create-checkout-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courseId: course.id, price: course.price, userId: user.id })
+        });
+        const data = await response.json();
+        if (response.ok && data.url) {
+          window.location.href = data.url;
+        } else {
+          toast({
+            title: "Payment failed",
+            description: data.error || 'Could not initiate payment.',
+            variant: "destructive"
+          });
+        }
+      } catch (error) {
+        toast({
+          title: "Payment error",
+          description: error.message || String(error),
+          variant: "destructive"
+        });
+      }
+      return;
+    }
+    // Free course: enroll directly
     enrollMutation.mutate();
   };
 
