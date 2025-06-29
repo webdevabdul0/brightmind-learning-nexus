@@ -714,10 +714,7 @@ const AdminDashboard = () => {
               <Label>Level</Label>
               <Input name="level" value={courseForm.level} onChange={handleCourseFormChange} />
             </div>
-            <div>
-              <Label>Image URL</Label>
-              <Input name="image_url" value={courseForm.image_url} onChange={handleCourseFormChange} />
-            </div>
+            
             <DialogFooter>
               <Button type="submit" disabled={createCourseMutation.isPending}>Create</Button>
             </DialogFooter>

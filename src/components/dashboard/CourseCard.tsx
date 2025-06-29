@@ -40,6 +40,15 @@ const CourseCard = ({
   const progressPercent = progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0;
   const isPremium = price && price > 0;
   
+  // Format currency for display
+  const formatCurrency = (price: number | null) => {
+    if (price === null || price === 0) return 'Free';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(price);
+  };
+  
   return (
     <div 
       className={cn(`rounded-xl p-4 sm:p-6 relative overflow-hidden cursor-pointer transform transition-all hover:translate-y-[-5px] duration-300 ${color} border border-border`, className)}
@@ -67,7 +76,7 @@ const CourseCard = ({
         </Button>
       </div>
       
-      {/* Enroll button for students only, not enrolled, not loading */}
+      {/* Enroll/Buy button for students only, not enrolled, not loading */}
       {!isLoadingEnrollments && !isEnrolled && userRole === 'student' && onEnroll && (
         <div className="absolute bottom-4 right-4">
           <Button 
@@ -77,7 +86,7 @@ const CourseCard = ({
               onEnroll(id, e);
             }}
           >
-            Enroll
+            {isPremium ? `Buy ${formatCurrency(price)}` : 'Enroll'}
           </Button>
         </div>
       )}

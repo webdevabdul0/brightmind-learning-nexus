@@ -1128,14 +1128,7 @@ const CourseDetail = () => {
       <p className="mb-6 text-muted-foreground text-center max-w-lg">
         Enroll in this course to access all premium features and maximize your learning experience!
       </p>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full mb-6">
-        <div className="bg-muted/30 rounded-lg p-4 flex flex-col items-center">
-          <h3 className="font-semibold text-lg mb-2">Free</h3>
-          <ul className="text-sm text-muted-foreground space-y-2">
-            <li>✔️ Course overview</li>
-            <li>✔️ Introduction video (if available)</li>
-          </ul>
-        </div>
+      
         <div className="bg-brightmind-blue text-white rounded-lg p-4 flex flex-col items-center">
           <h3 className="font-semibold text-lg mb-2">Premium</h3>
           <ul className="text-sm space-y-2">
@@ -1148,19 +1141,19 @@ const CourseDetail = () => {
             <li>✔️ Attendance Tracking</li>
           </ul>
         </div>
-      </div>
+      
       <Button 
         className="mt-2 px-8 py-3 text-lg font-semibold"
-        onClick={handleEnroll}
+        onClick={isPaidCourse ? handleBuyPremium : handleEnroll}
         disabled={enrollMutation.isPending}
       >
         {enrollMutation.isPending ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Processing...
+            {isPaidCourse ? 'Processing...' : 'Processing...'}
           </>
         ) : (
-          <>Enroll Now - {formatCurrency(course.price)}</>
+          <>{isPaidCourse ? `Buy ${formatCurrency(course.price)}` : `Enroll Now - ${formatCurrency(course.price)}`}</>
         )}
       </Button>
     </div>
@@ -1215,29 +1208,26 @@ const CourseDetail = () => {
                     <span>{course.duration}</span>
                   </div>
                 )}
-                <div className="flex items-center gap-1 text-sm">
-                  <Users className="h-4 w-4" />
-                  <span>120 students</span>
-                </div>
+                
               </div>
               
               <p className="max-w-2xl">{course.description}</p>
               
-              {/* Only show enroll button if not enrolled and user is a student */}
+              {/* Only show enroll/buy button if not enrolled and user is a student */}
               {profile?.role === 'student' && !enrollment && (
                 <div className="mt-6">
                   <Button 
-                    onClick={handleEnroll}
+                    onClick={isPaidCourse ? handleBuyPremium : handleEnroll}
                     disabled={enrollMutation.isPending}
                     className="bg-white text-brightmind-blue hover:bg-white/90"
                   >
                     {enrollMutation.isPending ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Enrolling...
+                        {isPaidCourse ? 'Processing...' : 'Enrolling...'}
                       </>
                     ) : (
-                      <>Enroll Now - {formatCurrency(course.price)}</>
+                      <>{isPaidCourse ? `Buy ${formatCurrency(course.price)}` : `Enroll Now - ${formatCurrency(course.price)}`}</>
                     )}
                   </Button>
                 </div>
@@ -1671,6 +1661,11 @@ const CourseDetail = () => {
         {profile?.role === 'student' && enrollment && (
           <TabsContent value="attendance" className="animate-fade-in">
             <StudentAttendanceView courseId={courseId} userId={user?.id} />
+          </TabsContent>
+        )}
+        {profile?.role === 'student' && enrollment && isPaidCourse && !hasPremium && (
+          <TabsContent value="attendance" className="animate-fade-in">
+            {renderLimitedAccessBanner()}
           </TabsContent>
         )}
       </Tabs>

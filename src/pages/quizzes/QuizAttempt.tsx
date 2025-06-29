@@ -40,6 +40,12 @@ export default function QuizAttempt() {
         navigate('/quizzes');
         return;
       }
+      // Always fetch questions
+      const { data: questionData } = await supabase
+        .from('quiz_questions')
+        .select('*')
+        .eq('quiz_id', id);
+      setQuestions(questionData || []);
       // Check for existing attempt
       const { data: attemptData } = await supabase
         .from('quiz_attempts')
@@ -64,11 +70,6 @@ export default function QuizAttempt() {
       }
       setQuiz(quizData);
       setTimer(quizData.attempt_duration * 60); // seconds
-      const { data: questionData } = await supabase
-        .from('quiz_questions')
-        .select('*')
-        .eq('quiz_id', id);
-      setQuestions(questionData || []);
     };
     fetchQuiz();
   }, [id, profile, navigate, toast, user.id]);
@@ -92,23 +93,43 @@ export default function QuizAttempt() {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      // Save answers
+      // Auto-grading logic for option-based quizzes
+      let autoGrade: number | undefined = undefined;
+      let autoRemark: string | undefined = undefined;
+      const allOptionBased = questions.every(q => q.answer_type === 'option');
+      if (allOptionBased) {
+        let correct = 0;
+        questions.forEach(q => {
+          if (answers[q.id] === q.correct_option) correct++;
+        });
+        autoGrade = correct;
+        autoRemark = `Auto-graded: ${correct} out of ${questions.length} correct.`;
+      }
+      // Save answers and grade if auto-graded
       const { error } = await supabase.from('quiz_attempts').insert({
         quiz_id: id,
         student_id: user.id,
         answers,
         submitted_at: new Date().toISOString(),
+        ...(allOptionBased ? { grade: autoGrade, remark: autoRemark, status: 'graded' } : {})
       });
 
       if (error) {
         throw error;
       }
 
+      if (allOptionBased) {
+        setGrade(autoGrade);
+        setRemark(autoRemark);
+      }
       setSubmitting(false);
       setSubmitted(true);
       toast({ title: 'Quiz submitted', description: 'Your quiz has been submitted.' });
-      navigate('/quizzes');
-    } catch (error) {
+      // If auto-graded, do not navigate away so student can see grade
+      if (!allOptionBased) {
+        navigate('/quizzes');
+      }
+    } catch (error: any) {
       setSubmitting(false);
       toast({ 
         title: 'Error submitting quiz',
@@ -130,13 +151,6 @@ export default function QuizAttempt() {
           </DialogHeader>
           <div>Grade: {grade} / {questions.length}</div>
           <div>Remark: {remark || 'No remark yet.'}</div>
-          {questions.map((q, idx) => (
-            <div key={q.id} className="mb-2">
-              <div className="font-semibold">Q{idx + 1}: {q.question_text}</div>
-              <div>Your Answer: {answers[q.id]?.toString() ?? ''}</div>
-              <div>Correct: {q.answer_type === 'option' ? (answers[q.id] === q.correct_option ? 'Yes' : 'No') : ''}</div>
-            </div>
-          ))}
         </DialogContent>
       </Dialog>
     </div>
