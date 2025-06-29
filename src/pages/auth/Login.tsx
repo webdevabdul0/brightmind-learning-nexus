@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -68,11 +67,13 @@ const Login = () => {
   return (
     <div className="flex min-h-screen bg-background">
       {/* Left side - Image */}
-      <div className="hidden lg:block lg:w-1/2 bg-brightmind-blue">
-        <div className="flex items-center justify-center h-full p-12">
+      <div className="hidden lg:block lg:w-1/2 relative">
+        <div className="absolute inset-0 w-full h-full bg-[url('/loginBg.jpg')] bg-cover bg-center" />
+        <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-brightmind-blue/90 to-blue-900/80" />
+        <div className="relative flex items-center justify-center h-full p-12 z-10">
           <div className="max-w-md text-white">
-            <h1 className="text-4xl font-bold mb-6">Welcome back to Bright Mind</h1>
-            <p className="text-lg mb-8">Access your personalized learning experience and continue your educational journey.</p>
+            <h1 className="text-4xl font-bold mb-6 drop-shadow-lg">Welcome back to Bright Mind</h1>
+            <p className="text-lg mb-8 drop-shadow">Access your personalized learning experience and continue your educational journey.</p>
             <div className="bg-white/10 p-6 rounded-lg backdrop-blur-sm">
               <blockquote className="italic">
                 "Education is the passport to the future, for tomorrow belongs to those who prepare for it today."

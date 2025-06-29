@@ -200,8 +200,7 @@ const Profile = () => {
       <Tabs defaultValue="personal" className="mb-8">
         <TabsList className="mb-6">
           <TabsTrigger value="personal">Personal Info</TabsTrigger>
-          <TabsTrigger value="courses">My Courses</TabsTrigger>
-          <TabsTrigger value="achievements">Achievements</TabsTrigger>
+          {profile?.role === 'student' && <TabsTrigger value="courses">My Courses</TabsTrigger>}
         </TabsList>
         
         <TabsContent value="personal" className="mt-6">
@@ -411,81 +410,57 @@ const Profile = () => {
           </div>
         </TabsContent>
         
-        <TabsContent value="courses" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>My Enrolled Courses</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {isLoadingCourses ? (
-                  renderCourseSkeletons()
-                ) : enrolledCourses && enrolledCourses.length > 0 ? (
-                  enrolledCourses.map((enrollment: any) => {
-                    const course = enrollment.course;
-                    const hash = Math.abs(
-                      [...course.id + course.title].reduce((acc, c) => acc + c.charCodeAt(0), 0)
-                    );
-                    const color = getRandomColor(hash);
-                    return (
-                      <div key={enrollment.id} className={`rounded-xl p-4 ${color}`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="font-semibold flex items-center">
-                            <BookOpen className="h-5 w-5 mr-2 text-white drop-shadow" />
-                            {course.title}
-                          </h3>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="text-white"
-                            onClick={() => window.location.href = `/courses/${course.id}`}
-                          >
-                            View Course
-                          </Button>
+        {profile?.role === 'student' && (
+          <TabsContent value="courses" className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>My Enrolled Courses</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {isLoadingCourses ? (
+                    renderCourseSkeletons()
+                  ) : enrolledCourses && enrolledCourses.length > 0 ? (
+                    enrolledCourses.map((enrollment: any) => {
+                      const course = enrollment.course;
+                      const hash = Math.abs(
+                        [...course.id + course.title].reduce((acc, c) => acc + c.charCodeAt(0), 0)
+                      );
+                      const color = getRandomColor(hash);
+                      return (
+                        <div key={enrollment.id} className="rounded-xl p-4 bg-card text-card-foreground border border-border">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="font-semibold flex items-center">
+                              <BookOpen className="h-5 w-5 mr-2 text-primary drop-shadow" />
+                              {course.title}
+                            </h3>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-primary"
+                              onClick={() => window.location.href = `/courses/${course.id}`}
+                            >
+                              View Course
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center p-6 bg-muted/40 rounded-lg">
-                    <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-medium mb-2">No courses yet</h3>
-                    <p className="text-muted-foreground mb-4">
-                      You haven't enrolled in any courses yet.
-                    </p>
-                    <Button onClick={() => window.location.href = '/courses'}>Browse Courses</Button>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="achievements" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>My Achievements</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {achievements.map(achievement => (
-                  <div key={achievement.id} className="bg-slate-50 p-4 rounded-lg flex items-center">
-                    <div className="h-12 w-12 rounded-full bg-brightmind-lightpurple text-2xl flex items-center justify-center mr-4">
-                      {achievement.badge}
-                    </div>
-                    <div>
-                      <h3 className="font-semibold">{achievement.title}</h3>
-                      <p className="text-sm text-muted-foreground flex items-center">
-                        <Calendar className="h-3 w-3 mr-1" />
-                        {achievement.date}
+                      );
+                    })
+                  ) : (
+                    <div className="text-center p-6 bg-muted/40 rounded-lg">
+                      <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-medium mb-2">No courses yet</h3>
+                      <p className="text-muted-foreground mb-4">
+                        You haven't enrolled in any courses yet.
                       </p>
+                      <Button onClick={() => window.location.href = '/courses'}>Browse Courses</Button>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

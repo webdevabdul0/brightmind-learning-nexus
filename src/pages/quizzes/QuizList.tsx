@@ -123,18 +123,18 @@ const QuizList: React.FC = () => {
               const endDate = new Date(scheduledDate.getTime() + quiz.attempt_duration * 60000);
               const now = new Date();
               return (
-                <Card key={quiz.id} className="overflow-hidden transition-all hover:shadow-md bg-white/80 border border-gray-200">
+                <Card key={quiz.id} className="overflow-hidden transition-all hover:shadow-md bg-card text-card-foreground border border-border">
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between p-4">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
                         <Badge variant="secondary">{quiz.status.charAt(0).toUpperCase() + quiz.status.slice(1)}</Badge>
                         <span className="font-semibold text-lg">{quiz.title}</span>
                         {courseTitles[quiz.course_id] && (
-                          <span className="ml-2 text-xs text-gray-600 bg-gray-100 rounded px-2 py-0.5">{courseTitles[quiz.course_id]}</span>
+                          <span className="ml-2 text-xs text-muted-foreground bg-muted rounded px-2 py-0.5">{courseTitles[quiz.course_id]}</span>
                         )}
                       </div>
-                      <div className="text-sm text-gray-500">Scheduled: {scheduledDate.toLocaleString()}</div>
-                      <div className="text-sm text-gray-500">Duration: {quiz.attempt_duration} min</div>
+                      <div className="text-sm text-muted-foreground">Scheduled: {scheduledDate.toLocaleString()}</div>
+                      <div className="text-sm text-muted-foreground">Duration: {quiz.attempt_duration} min</div>
                     </div>
                     <div className="mt-2 md:mt-0 flex flex-col gap-2 items-end">
                       {role === 'teacher' && (
@@ -172,7 +172,7 @@ const QuizList: React.FC = () => {
                   </div>
                   {/* Student grade/remark display */}
                   {role === 'student' && quizAttempts[quiz.id] && (
-                    <div className="mx-4 mb-4 p-3 rounded-lg bg-green-50 border border-green-200">
+                    <div className="mx-4 mb-4 p-3 rounded-lg bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700">
                       <div className="flex items-center gap-2 mb-1">
                         <CheckCircle className="h-5 w-5 text-green-600" />
                         <span className="font-semibold text-green-700">Grade:</span>
@@ -181,7 +181,7 @@ const QuizList: React.FC = () => {
                       {quizAttempts[quiz.id].remark && (
                         <div className="flex items-start gap-2 mt-1">
                           <MessageSquare className="h-5 w-5 text-blue-500 mt-0.5" />
-                          <span className="text-blue-900">{quizAttempts[quiz.id].remark}</span>
+                          <span className="text-blue-900 dark:text-blue-200">{quizAttempts[quiz.id].remark}</span>
                         </div>
                       )}
                     </div>

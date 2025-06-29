@@ -50,7 +50,7 @@ const AssignmentCard = ({ assignment, onUpload, profile, user, handleViewDetails
   };
 
   return (
-    <Card className="overflow-hidden transition-all hover:shadow-md bg-white/80 border border-gray-200">
+    <Card className="overflow-hidden transition-all hover:shadow-md bg-card text-card-foreground border border-border">
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
           <div>
@@ -81,7 +81,7 @@ const AssignmentCard = ({ assignment, onUpload, profile, user, handleViewDetails
           )}
           {/* Student grade/feedback display */}
           {isStudent && isCompleted && (typeof assignment.grade !== 'undefined' || typeof assignment.feedback !== 'undefined') && (
-            <div className="mt-4 p-3 rounded-lg bg-green-50 border border-green-200">
+            <div className="mt-4 p-3 rounded-lg bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700">
               <div className="flex items-center gap-2 mb-1">
                 <CheckCircle className="h-5 w-5 text-green-600" />
                 <span className="font-semibold text-green-700">Grade:</span>

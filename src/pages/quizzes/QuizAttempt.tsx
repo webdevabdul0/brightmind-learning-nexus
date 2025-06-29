@@ -163,10 +163,10 @@ export default function QuizAttempt() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <Card className="p-6">
+      <Card className="p-6 bg-card text-card-foreground border border-border">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">Attempt Quiz: {quiz.title}</h2>
-          <div className="text-lg font-mono bg-gray-100 rounded px-3 py-1">{minutes}:{seconds.toString().padStart(2, '0')}</div>
+          <div className="text-lg font-mono bg-muted rounded px-3 py-1">{minutes}:{seconds.toString().padStart(2, '0')}</div>
         </div>
         {currentQuestions.map((q, idx) => (
           <div key={q.id} className="mb-8">
@@ -174,7 +174,7 @@ export default function QuizAttempt() {
             {q.answer_type === 'option' ? (
               <div className="flex flex-col gap-2">
                 {(q.options || '').split(',').map((opt: string, i: number) => (
-                  <label key={i} className="bg-white border rounded p-3 cursor-pointer hover:bg-blue-50">
+                  <label key={i} className="bg-card border border-border rounded p-3 cursor-pointer hover:bg-muted">
                     <input
                       type="radio"
                       name={`q_${q.id}`}
@@ -190,7 +190,7 @@ export default function QuizAttempt() {
             ) : (
               <input
                 type="text"
-                className="w-full border rounded p-2"
+                className="w-full border border-border rounded p-2 bg-background text-foreground"
                 placeholder="Your answer"
                 value={answers[q.id] || ''}
                 onChange={e => handleAnswer(q.id, e.target.value)}

@@ -266,7 +266,6 @@ const Notifications = () => {
             </TabsTrigger>
             <TabsTrigger value="course">Course</TabsTrigger>
             <TabsTrigger value="assignment">Assignment</TabsTrigger>
-            <TabsTrigger value="system">System</TabsTrigger>
           </TabsList>
         </div>
 

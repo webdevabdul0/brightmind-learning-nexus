@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -199,22 +198,24 @@ const Signup = () => {
       </div>
       
       {/* Right side - Image and text */}
-      <div className="hidden lg:block lg:w-1/2 bg-brightmind-purple">
-        <div className="flex items-center justify-center h-full p-12">
+      <div className="hidden lg:block lg:w-1/2 relative">
+        <div className="absolute inset-0 w-full h-full bg-[url('/bg.jpg')] bg-cover bg-center" />
+        <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-brightmind-blue/90 to-blue-900/80" />
+        <div className="relative flex items-center justify-center h-full p-12 z-10">
           <div className="max-w-md text-white">
-            <h1 className="text-4xl font-bold mb-6">Start Your Learning Journey</h1>
-            <p className="text-lg mb-8">Join thousands of students on the Bright Mind platform to enhance your education with personalized learning experiences.</p>
+            <h1 className="text-4xl font-bold mb-6 drop-shadow-lg">Start Your Learning Journey</h1>
+            <p className="text-lg mb-8 drop-shadow">Join thousands of students on the Bright Mind platform to enhance your education with personalized learning experiences.</p>
             <div className="space-y-6">
               <div className="flex items-center">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mr-4">1</div>
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mr-4 font-bold text-lg">1</div>
                 <p>Access comprehensive course materials</p>
               </div>
               <div className="flex items-center">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mr-4">2</div>
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mr-4 font-bold text-lg">2</div>
                 <p>Connect with expert teachers</p>
               </div>
               <div className="flex items-center">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mr-4">3</div>
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mr-4 font-bold text-lg">3</div>
                 <p>Track your progress and achievements</p>
               </div>
             </div>

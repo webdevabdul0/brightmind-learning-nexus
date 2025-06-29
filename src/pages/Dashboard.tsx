@@ -549,7 +549,7 @@ const Dashboard = () => {
             </div>
           ) : (
             teacherAssignments.map((assignment: any) => (
-              <div key={assignment.id} className="rounded-xl p-6 bg-white shadow flex flex-col gap-2">
+              <div key={assignment.id} className="rounded-xl p-6 bg-card text-card-foreground border border-border shadow flex flex-col gap-2">
                 <div className="font-semibold text-lg mb-2 flex justify-between items-center">
                   <span>{assignment.title}</span>
                   <span className="flex gap-2">
@@ -557,7 +557,7 @@ const Dashboard = () => {
                     <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm({ type: 'assignment', id: assignment.id })}><Trash className="h-4 w-4 text-red-500" /></Button>
                   </span>
                 </div>
-                <div className="text-sm text-gray-500 mb-2">Due: {assignment.due_date ? new Date(assignment.due_date).toLocaleDateString() : 'N/A'}</div>
+                <div className="text-sm text-muted-foreground mb-2">Due: {assignment.due_date ? new Date(assignment.due_date).toLocaleDateString() : 'N/A'}</div>
                 <div className="flex gap-2">
                   <Button size="sm" onClick={() => navigate(`/courses/${assignment.course_id}`)}>Go to Course</Button>
                   <Button size="sm" variant="outline" onClick={() => handleViewSubmissions(assignment.id)}>View Submissions</Button>
@@ -620,7 +620,7 @@ const Dashboard = () => {
             </div>
           ) : (
             teacherLiveClasses.map((liveClass: any) => (
-              <div key={liveClass.id} className="rounded-xl p-6 bg-white shadow flex flex-col gap-2">
+              <div key={liveClass.id} className="rounded-xl p-6 bg-card text-card-foreground border border-border shadow flex flex-col gap-2">
                 <div className="font-semibold text-lg mb-2 flex justify-between items-center">
                   <span>{liveClass.title}</span>
                   <span className="flex gap-2">
@@ -628,8 +628,8 @@ const Dashboard = () => {
                     <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm({ type: 'live_class', id: liveClass.id })}><Trash className="h-4 w-4 text-red-500" /></Button>
                   </span>
                 </div>
-                <div className="text-sm text-gray-500 mb-2">Start: {liveClass.start_time ? new Date(liveClass.start_time).toLocaleString() : 'N/A'}</div>
-                <div className="text-sm text-gray-500 mb-2">Duration: {liveClass.duration} min</div>
+                <div className="text-sm text-muted-foreground mb-2">Start: {liveClass.start_time ? new Date(liveClass.start_time).toLocaleString() : 'N/A'}</div>
+                <div className="text-sm text-muted-foreground mb-2">Duration: {liveClass.duration} min</div>
                 <div className="flex gap-2">
                   <Button size="sm" onClick={() => navigate(`/courses/${liveClass.course_id}`)}>Go to Course</Button>
                 </div>
@@ -738,7 +738,7 @@ const Dashboard = () => {
 
       {/* Study Statistics */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
-        <div className="lg:col-span-2 bg-white p-4 md:p-6 rounded-xl shadow">
+        <div className="lg:col-span-2 bg-card p-4 md:p-6 rounded-xl shadow text-card-foreground">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-2">
             <h3 className="text-xl font-semibold">STUDY STATISTICS</h3>
             <Tabs defaultValue="week">
@@ -764,7 +764,7 @@ const Dashboard = () => {
           </div>
         </div>
         
-        <div className="bg-white p-4 md:p-6 rounded-xl shadow">
+        <div className="bg-card p-4 md:p-6 rounded-xl shadow text-card-foreground">
           <h3 className="text-xl font-semibold mb-6">PROGRESS</h3>
           <div className="flex justify-center">
             <div className="relative w-36 h-36 md:w-48 md:h-48">
@@ -794,7 +794,7 @@ const Dashboard = () => {
               </svg>
               <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
                 <div className="text-3xl font-bold">{averageProgress}%</div>
-                <div className="text-sm text-gray-500">overall</div>
+                <div className="text-sm text-muted-foreground">overall</div>
               </div>
             </div>
           </div>

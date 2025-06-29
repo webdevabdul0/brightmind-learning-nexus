@@ -198,7 +198,7 @@ const AISuggestions = () => {
   };
 
   return (
-    <div className="container mx-auto animate-fade-in min-h-screen flex flex-col">
+    <div className="container mx-auto animate-fade-in min-h-screen flex flex-col bg-background text-foreground">
       <div className="flex flex-col lg:flex-row gap-8 flex-1">
         {/* Chat Section */}
         <div className="lg:w-2/3 flex flex-col flex-1">
@@ -213,7 +213,7 @@ const AISuggestions = () => {
             <Button variant="outline" onClick={() => { setMessages([]); clearMemory(); }}>Clear Chat</Button>
           </div>
           
-          <div className="bg-white rounded-lg shadow-sm border overflow-hidden flex flex-col flex-1 min-h-0">
+          <div className="bg-card rounded-lg shadow-sm border overflow-hidden flex flex-col flex-1 min-h-0">
             {/* Messages */}
             <div className="flex-1 overflow-auto p-4 min-h-0">
               {messages.map((message) => (
@@ -240,8 +240,8 @@ const AISuggestions = () => {
                     <div 
                       className={`p-3 rounded-lg ${
                         message.role === 'user' 
-                          ? 'bg-brightmind-blue text-white rounded-tr-none' 
-                          : 'bg-gray-100 text-gray-800 rounded-tl-none'
+                          ? 'bg-primary text-primary-foreground rounded-tr-none' 
+                          : 'bg-card text-card-foreground rounded-tl-none'
                       }`}
                     >
                       {message.role === 'assistant' ? (
@@ -309,7 +309,7 @@ const AISuggestions = () => {
 
         {/* Recommendations Section */}
         <div className="lg:w-1/3">
-          <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+          <div className="bg-card rounded-lg shadow-sm border overflow-hidden">
             <div className="p-4 border-b bg-muted/30">
               <h2 className="font-semibold flex items-center">
                 <Lightbulb className="h-5 w-5 mr-2 text-amber-500" />
@@ -338,8 +338,8 @@ const AISuggestions = () => {
               ) : (
                 <div className="space-y-4">
                   {mockRecommendations.map((course) => (
-                    <Card key={course.id} className="border overflow-hidden transition-all hover:shadow-md">
-                      <CardHeader className="p-4 pb-2">
+                    <Card key={course.id} className="border border-border bg-card text-card-foreground overflow-hidden transition-all hover:shadow-md">
+                      <CardHeader className="p-4 pb-2 bg-background">
                         <div className="flex justify-between items-start">
                           <div>
                             <CardTitle className="text-base">{course.title}</CardTitle>
@@ -353,10 +353,10 @@ const AISuggestions = () => {
                           </Badge>
                         </div>
                       </CardHeader>
-                      <CardContent className="p-4 pt-0 text-sm">
+                      <CardContent className="p-4 pt-0 text-sm bg-background">
                         <p>{course.description}</p>
                       </CardContent>
-                      <CardFooter className="p-4 pt-0 flex justify-end">
+                      <CardFooter className="p-4 pt-0 flex justify-end bg-background">
                         <Button variant="ghost" size="sm">View Details</Button>
                         <Button size="sm" className="ml-2">Enroll</Button>
                       </CardFooter>

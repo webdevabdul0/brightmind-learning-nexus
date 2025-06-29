@@ -1,6 +1,7 @@
 import { MoreVertical, BookOpen, User2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 interface CourseProgress {
   completed: number;
@@ -19,6 +20,7 @@ interface CourseCardProps {
   userRole?: string;
   onEnroll?: (courseId: string, e: React.MouseEvent) => void;
   price?: number | null;
+  className?: string;
 }
 
 const CourseCard = ({ 
@@ -32,14 +34,15 @@ const CourseCard = ({
   isLoadingEnrollments = false,
   userRole = '',
   onEnroll,
-  price = null
+  price = null,
+  className
 }: CourseCardProps) => {
   const progressPercent = progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0;
   const isPremium = price && price > 0;
   
   return (
     <div 
-      className={`rounded-xl p-4 sm:p-6 relative overflow-hidden cursor-pointer transform transition-all hover:translate-y-[-5px] duration-300 ${color}`}
+      className={cn(`rounded-xl p-4 sm:p-6 relative overflow-hidden cursor-pointer transform transition-all hover:translate-y-[-5px] duration-300 ${color} border border-border`, className)}
       onClick={onClick}
     >
       {/* Premium badge */}
@@ -86,9 +89,9 @@ const CourseCard = ({
             <span>Progress</span>
             <span>{progressPercent}%</span>
           </div>
-          <div className="h-2 w-full bg-black/10 rounded-full overflow-hidden mb-1">
+          <div className="h-2 w-full bg-muted rounded-full overflow-hidden mb-1">
             <div 
-              className="h-full bg-white transition-all duration-700 ease-out" 
+              className="h-full bg-primary transition-all duration-700 ease-out" 
               style={{ width: `${progressPercent}%` }}
             />
           </div>

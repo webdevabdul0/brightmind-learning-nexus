@@ -99,6 +99,17 @@ const Settings = () => {
     }
   }, [userSettings]);
 
+  // Add dark mode toggle logic
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [theme]);
+
   // Update user profile mutation
   const updateProfileMutation = useMutation({
     mutationFn: async () => {
@@ -279,7 +290,6 @@ const Settings = () => {
       <Tabs defaultValue="profile" className="mb-8">
         <TabsList className="mb-6">
           <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
         </TabsList>
@@ -366,124 +376,26 @@ const Settings = () => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="notifications">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-              <CardDescription>
-                Configure how and when you receive notifications.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-sm font-medium">Email Notifications</h4>
-                    <p className="text-sm text-gray-500">Receive notifications via email</p>
-                  </div>
-                  <Switch
-                    checked={emailNotifications}
-                    onCheckedChange={setEmailNotifications}
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-sm font-medium">Browser Notifications</h4>
-                    <p className="text-sm text-gray-500">Show notifications in your browser</p>
-                  </div>
-                  <Switch
-                    checked={browserNotifications}
-                    onCheckedChange={setBrowserNotifications}
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-sm font-medium">Assignment Reminders</h4>
-                    <p className="text-sm text-gray-500">Receive reminders about upcoming assignments</p>
-                  </div>
-                  <Switch
-                    checked={assignmentReminders}
-                    onCheckedChange={setAssignmentReminders}
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-sm font-medium">Live Class Reminders</h4>
-                    <p className="text-sm text-gray-500">Receive reminders before scheduled classes</p>
-                  </div>
-                  <Switch
-                    checked={classReminders}
-                    onCheckedChange={setClassReminders}
-                  />
-                </div>
-              </div>
-              
-              <Button 
-                onClick={handleNotificationSettingsUpdate}
-                disabled={updateNotificationSettingsMutation.isPending}
-              >
-                {updateNotificationSettingsMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="mr-2 h-4 w-4" />
-                    Save Preferences
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         <TabsContent value="appearance">
           <Card>
             <CardHeader>
-              <CardTitle>Display Settings</CardTitle>
+              <CardTitle>Appearance</CardTitle>
               <CardDescription>
-                Customize how the application looks and feels.
+                Choose your display preferences.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Theme</Label>
-                  <RadioGroup value={theme} onValueChange={setTheme} className="flex flex-wrap gap-4">
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="light" id="light" />
-                      <Label htmlFor="light">Light</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="dark" id="dark" />
-                      <Label htmlFor="dark">Dark</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="system" id="system" />
-                      <Label htmlFor="system">System</Label>
-                    </div>
-                  </RadioGroup>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-medium">Theme</h4>
+                  <p className="text-sm text-gray-500">Switch between light and dark mode</p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="language">Language</Label>
-                  <Select value={language} onValueChange={setLanguage}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select language" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="english">English</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Switch
+                  checked={theme === 'dark'}
+                  onCheckedChange={checked => setTheme(checked ? 'dark' : 'light')}
+                />
               </div>
-              <Button 
-                onClick={handleAppearanceSettingsUpdate}
-                disabled={updateAppearanceSettingsMutation.isPending}
-              >
+              <Button onClick={handleAppearanceSettingsUpdate} disabled={updateAppearanceSettingsMutation.isPending}>
                 {updateAppearanceSettingsMutation.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -492,7 +404,7 @@ const Settings = () => {
                 ) : (
                   <>
                     <Save className="mr-2 h-4 w-4" />
-                    Save Settings
+                    Save Changes
                   </>
                 )}
               </Button>

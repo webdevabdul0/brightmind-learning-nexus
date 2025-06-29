@@ -1,4 +1,3 @@
-
 import { cn } from '@/lib/utils';
 
 interface StatCardProps {
@@ -20,12 +19,10 @@ const StatCard = ({
 }: StatCardProps) => {
   return (
     <div className={cn(
-      'rounded-lg p-5 shadow flex items-center transform transition-all hover:scale-[1.02] duration-300',
-      bgColor,
-      textColor,
+      'rounded-lg p-5 shadow flex items-center transform transition-all hover:scale-[1.02] duration-300 bg-card text-card-foreground',
       className
     )}>
-      <div className="mr-4 bg-gray-100/30 p-3 rounded-full">
+      <div className="mr-4 bg-muted p-3 rounded-full">
         {icon}
       </div>
       <div>

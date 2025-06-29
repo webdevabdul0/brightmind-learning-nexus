@@ -171,8 +171,8 @@ const LiveClassCard = ({ session, handleEdit, handleDelete }: LiveClassCardProps
   };
 
   return (
-    <Card className="overflow-hidden transition-all hover:shadow-md">
-      <CardHeader className="pb-2">
+    <Card className="overflow-hidden transition-all hover:shadow-md bg-card text-card-foreground border border-border">
+      <CardHeader className="pb-2 bg-background">
         <div className="flex justify-between items-start">
           <div>
             <Badge className={getStatusColor(status)} variant="secondary">
@@ -183,7 +183,7 @@ const LiveClassCard = ({ session, handleEdit, handleDelete }: LiveClassCardProps
           </div>
         </div>
       </CardHeader>
-      <CardContent className="pb-2">
+      <CardContent className="pb-2 bg-background">
         <div className="space-y-2">
           <div className="flex items-center text-sm">
             <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -199,7 +199,7 @@ const LiveClassCard = ({ session, handleEdit, handleDelete }: LiveClassCardProps
           </div>
         </div>
       </CardContent>
-      <CardFooter>
+      <CardFooter className="bg-background">
         <div className="flex justify-between w-full items-center">
           <div className="flex gap-2">
             <Button variant="outline" size="sm">
