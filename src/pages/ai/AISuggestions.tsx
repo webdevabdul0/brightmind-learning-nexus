@@ -198,10 +198,9 @@ const AISuggestions = () => {
   };
 
   return (
-    <div className="container mx-auto animate-fade-in min-h-screen flex flex-col bg-background text-foreground">
-      <div className="flex flex-col lg:flex-row gap-8 flex-1">
+    <div className="container mx-auto animate-fade-in min-h-screen flex flex-col bg-background text-foreground min-h-0">        <div className="flex flex-col lg:flex-row gap-8 flex-1 min-h-0">
         {/* Chat Section */}
-        <div className="lg:w-2/3 flex flex-col flex-1">
+        <div className="lg:w-2/3 flex flex-col flex-1 min-h-0">
           <div className="mb-8 flex items-center justify-between">
             <div>
               <h1 className="text-4xl font-bold mb-2 flex items-center">
@@ -215,7 +214,7 @@ const AISuggestions = () => {
           
           <div className="bg-card rounded-lg shadow-sm border overflow-hidden flex flex-col flex-1 min-h-0">
             {/* Messages */}
-            <div className="flex-1 overflow-auto p-4 min-h-0">
+            <div className="flex-1 overflow-auto p-4 min-h-0 max-h-[calc(100vh-220px)]">
               {messages.map((message) => (
                 <div 
                   key={message.id}
