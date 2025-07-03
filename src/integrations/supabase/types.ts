@@ -641,6 +641,54 @@ export type Database = {
           }
         ];
       },
+      quizzes: {
+        Row: {
+          id: string;
+          title: string;
+          course_id: string;
+          created_by: string;
+          scheduled_at: string;
+          attempt_duration: number;
+          status: string;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          course_id: string;
+          created_by: string;
+          scheduled_at: string;
+          attempt_duration: number;
+          status: string;
+          created_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          course_id?: string;
+          created_by?: string;
+          scheduled_at?: string;
+          attempt_duration?: number;
+          status?: string;
+          created_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "quizzes_course_id_fkey",
+            columns: ["course_id"],
+            isOneToOne: false,
+            referencedRelation: "courses",
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quizzes_created_by_fkey",
+            columns: ["created_by"],
+            isOneToOne: false,
+            referencedRelation: "profiles",
+            referencedColumns: ["id"]
+          }
+        ];
+      },
     }
     Views: {
       [_ in never]: never

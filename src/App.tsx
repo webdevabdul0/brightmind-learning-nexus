@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/providers/AuthProvider";
 
+
 // Layout
 import SidebarLayout from "@/components/layout/SidebarLayout";
 
@@ -106,6 +107,9 @@ const App = () => (
               </SidebarLayout>
             </RequireAuth>
           } />
+
+
+
           
           <Route path="/live-classes/:sessionId" element={
             <RequireAuth>

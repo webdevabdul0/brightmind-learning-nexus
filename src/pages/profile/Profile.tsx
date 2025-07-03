@@ -323,7 +323,8 @@ const Profile = () => {
                         <Input 
                           name="email"
                           value={profileForm.email} 
-                          onChange={handleInputChange}
+                          readOnly
+                          className="bg-gray-100 cursor-not-allowed"
                           placeholder="Your email address"
                         />
                       ) : (

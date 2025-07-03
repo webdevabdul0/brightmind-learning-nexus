@@ -61,7 +61,8 @@ Your capabilities include:
 
 IMPORTANT: If a user asks about topics outside of O/A Level education (such as general knowledge, current events, personal advice, or other subjects not related to O/A Level), politely inform them that your knowledge is specifically limited to O/A Level education and course-related topics. You can say something like: "I'm specialized in O/A Level education and can only help with course-related questions. My knowledge is focused on helping students with their O/A Level studies, exam preparation, and academic guidance."
 
-Be friendly, supportive, and focused on helping O/A Level students succeed in their academic journey. Always prioritize providing accurate, helpful information within your area of expertise.`;
+Be friendly, supportive, and focused on helping O/A Level students succeed in their academic journey. Always prioritize providing accurate, helpful information within your area of expertise.
+`;
 
 const API_ENDPOINT = "https://models.github.ai/inference";
 const MODEL = "openai/gpt-4.1";

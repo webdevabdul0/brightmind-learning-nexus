@@ -46,6 +46,8 @@ const AdminDashboard = () => {
   });
   const [editCourseOpen, setEditCourseOpen] = useState(false);
   const [editCourseForm, setEditCourseForm] = useState<any>(null);
+  const [deleteCourseId, setDeleteCourseId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -237,6 +239,31 @@ const AdminDashboard = () => {
     createCourseMutation.mutate(courseForm);
   };
 
+  // Delete course and cascade related entities
+  const handleDeleteCourse = async () => {
+    if (!deleteCourseId) return;
+    setDeleteLoading(true);
+    try {
+      // Delete quizzes
+      await supabase.from('quizzes').delete().eq('course_id', deleteCourseId);
+      // Delete assignments
+      await supabase.from('assignments').delete().eq('course_id', deleteCourseId);
+      // Delete live classes
+      await supabase.from('live_classes').delete().eq('course_id', deleteCourseId);
+      // Optionally: delete modules, lessons, resources, enrollments, etc.
+      // Delete the course itself
+      const { error } = await supabase.from('courses').delete().eq('id', deleteCourseId);
+      if (error) throw error;
+      toast({ title: 'Course deleted', description: 'The course and all related content have been deleted.' });
+      setDeleteCourseId(null);
+      queryClient.invalidateQueries({ queryKey: ['adminCourses'] });
+    } catch (err: any) {
+      toast({ title: 'Failed to delete course', description: err.message, variant: 'destructive' });
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   return (
     <div className="container mx-auto animate-fade-in">
       {/* Header */}
@@ -256,8 +283,8 @@ const AdminDashboard = () => {
             />
             <Search className="absolute top-2.5 left-3 h-5 w-5 text-gray-400" />
           </div>
-          <Button onClick={() => setCreateCourseOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
+          <Button onClick={() => setCreateCourseOpen(true)} >
+            <Plus className="h-4 w-4 mr-2"  />
             Create Course
           </Button>
         </div>
@@ -418,9 +445,16 @@ const AdminDashboard = () => {
                     <div key={course.id} className="p-4 border rounded-lg">
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="font-medium">{course.title}</h3>
-                        <Badge variant="default">
-                          Course
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="default">Course</Badge>
+                          <Button variant="outline" size="sm" onClick={() => {
+                            setEditCourseForm({ ...course });
+                            setEditCourseOpen(true);
+                          }}>Edit</Button>
+                          <Button variant="destructive" size="icon" onClick={() => setDeleteCourseId(course.id)}>
+                            <Trash className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <div className="flex justify-between text-sm">
@@ -471,6 +505,9 @@ const AdminDashboard = () => {
                             setEditCourseForm({ ...course });
                             setEditCourseOpen(true);
                           }}>Edit</Button>
+                          <Button variant="destructive" size="icon" onClick={() => setDeleteCourseId(course.id)}>
+                            <Trash className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
                       <div className="space-y-2">
@@ -674,6 +711,22 @@ const AdminDashboard = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Delete Course Confirmation Dialog (moved outside Tabs) */}
+      <Dialog open={!!deleteCourseId} onOpenChange={open => { if (!open) setDeleteCourseId(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Course</DialogTitle>
+          </DialogHeader>
+          <p>Are you sure you want to delete this course? This will also delete all related quizzes, assignments, and live classes. This action cannot be undone.</p>
+          <DialogFooter>
+            <Button variant="destructive" onClick={handleDeleteCourse} disabled={deleteLoading}>
+              {deleteLoading ? 'Deleting...' : 'Delete'}
+            </Button>
+            <Button onClick={() => setDeleteCourseId(null)} disabled={deleteLoading}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={createCourseOpen} onOpenChange={setCreateCourseOpen}>
         <DialogContent>
