@@ -74,6 +74,7 @@ const Profile = () => {
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   // Fetch enrolled courses
   const { data: enrolledCourses = [], isLoading: isLoadingCourses } = useQuery({
@@ -133,6 +134,18 @@ const Profile = () => {
   });
 
   const handleSaveProfile = () => {
+    // Phone validation: only digits, optional +, 10-15 digits
+    const phoneRegex = /^\+?\d{10,15}$/;
+    if (!phoneRegex.test(profileForm.phone)) {
+      setPhoneError('Please enter a valid phone number (10-15 digits, numbers only).');
+      toast({
+        title: 'Invalid phone number',
+        description: 'Please enter a valid phone number (10-15 digits, numbers only).',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setPhoneError(null);
     updateProfileMutation.mutate(profileForm);
   };
 
@@ -175,6 +188,14 @@ const Profile = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setProfileForm(prev => ({ ...prev, [name]: value }));
+    if (name === 'phone') {
+      const phoneRegex = /^\+?\d{10,15}$/;
+      if (!phoneRegex.test(value)) {
+        setPhoneError('Please enter a valid phone number (10-15 digits, numbers only).');
+      } else {
+        setPhoneError(null);
+      }
+    }
   };
 
   // Render course skeletons
