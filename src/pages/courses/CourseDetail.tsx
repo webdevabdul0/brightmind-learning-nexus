@@ -94,7 +94,6 @@ const CourseDetail = () => {
   const [withdrawing, setWithdrawing] = useState(false);
   // Add state for locked lesson modal
   const [lockedModalOpen, setLockedModalOpen] = useState(false);
-  const [studentSubmissions, setStudentSubmissions] = useState<Record<string, any>>({});
 
   // Fetch course details
   const { data: course, isLoading: isLoadingCourse } = useQuery({
@@ -1176,70 +1175,6 @@ const CourseDetail = () => {
     </div>
   );
 
-  useEffect(() => {
-    const fetchSubmissions = async () => {
-      if (!user || !assignments.length) return;
-      const { data, error } = await supabase
-        .from('assignment_submissions')
-        .select('*')
-        .eq('student_id', user.id)
-        .in('assignment_id', assignments.map(a => a.id));
-      if (!error && data) {
-        const map: Record<string, any> = {};
-        data.forEach((sub: any) => { map[sub.assignment_id] = sub; });
-        setStudentSubmissions(map);
-      }
-    };
-    if (profile?.role === 'student' && assignments.length > 0) fetchSubmissions();
-  }, [user, assignments, profile]);
-
-  const handleAssignmentUpload = async (assignmentId: string) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'application/pdf';
-    input.onchange = async (event: any) => {
-      const file = event.target.files[0];
-      if (!file) return;
-      if (file.type !== 'application/pdf') {
-        toast({ title: 'Invalid file', description: 'Please upload a PDF file.', variant: 'destructive' });
-        return;
-      }
-      toast({ title: 'Uploading...', description: 'Your assignment is being uploaded.' });
-      const filePath = `student-${user.id}/assignment-${assignmentId}-${Date.now()}.pdf`;
-      const { data: uploadData, error: uploadError } = await supabase.storage.from('assignments').upload(filePath, file);
-      if (uploadError) {
-        toast({ title: 'Upload failed', description: uploadError.message, variant: 'destructive' });
-        return;
-      }
-      const { data: urlData } = supabase.storage.from('assignments').getPublicUrl(filePath);
-      const fileUrl = urlData?.publicUrl || '';
-      const { error: subError } = await supabase.from('assignment_submissions').upsert({
-        assignment_id: assignmentId,
-        student_id: user.id,
-        file_url: fileUrl,
-        submitted_at: new Date().toISOString(),
-        status: 'submitted_for_grading'
-      });
-      if (subError) {
-        toast({ title: 'Submission failed', description: subError.message, variant: 'destructive' });
-        return;
-      }
-      toast({ title: 'Assignment submitted', description: 'Your PDF has been uploaded.' });
-      // Refetch submissions
-      const { data, error } = await supabase
-        .from('assignment_submissions')
-        .select('*')
-        .eq('student_id', user.id)
-        .in('assignment_id', assignments.map(a => a.id));
-      if (!error && data) {
-        const map: Record<string, any> = {};
-        data.forEach((sub: any) => { map[sub.assignment_id] = sub; });
-        setStudentSubmissions(map);
-      }
-    };
-    input.click();
-  };
-
   return (
     <div className="container mx-auto animate-fade-in">
       {/* Header */}
@@ -1535,51 +1470,29 @@ const CourseDetail = () => {
             </div>
           ) : assignments.length > 0 ? (
             <div className="space-y-4">
-              {assignments.map((assignment) => {
-                const submission = studentSubmissions[assignment.id];
-                const isCompleted = submission?.status === 'completed';
-                const isSubmittedForGrading = submission?.status === 'submitted_for_grading';
-                return (
-                  <div 
-                    key={assignment.id} 
-                    className="p-4 border rounded-lg flex items-center justify-between"
-                  >
-                    <div className="flex items-center">
-                      <FileText className="w-5 h-5 mr-3 text-brightmind-purple" />
-                      <div>
-                        <div className="font-medium">{assignment.title}</div>
-                        <div className="text-sm text-muted-foreground flex items-center mt-1">
-                          <Calendar className="w-3 h-3 mr-1" />
-                          <span>Due: {new Date(assignment.due_date).toLocaleDateString()}</span>
-                        </div>
+              {assignments.map((assignment) => (
+                <div 
+                  key={assignment.id} 
+                  className="p-4 border rounded-lg flex items-center justify-between"
+                >
+                  <div className="flex items-center">
+                    <FileText className="w-5 h-5 mr-3 text-brightmind-purple" />
+                    <div>
+                      <div className="font-medium">{assignment.title}</div>
+                      <div className="text-sm text-muted-foreground flex items-center mt-1">
+                        <Calendar className="w-3 h-3 mr-1" />
+                        <span>Due: {new Date(assignment.due_date).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    {profile?.role === 'student' && (
-                      <div className="flex gap-2 ml-4">
-                        {assignment.question_pdf_url && (
-                          <Button variant="outline" size="sm" onClick={() => window.open(assignment.question_pdf_url, '_blank', 'noopener,noreferrer')}> 
-                            <FileText className="h-4 w-4 mr-1" />
-                            {isCompleted ? 'Download Question' : 'View Question'}
-                          </Button>
-                        )}
-                        {!isCompleted && (
-                          <Button size="sm" variant={isSubmittedForGrading ? 'secondary' : 'default'} onClick={() => handleAssignmentUpload(assignment.id)}>
-                            <span className="flex items-center">
-                              <span className="mr-1">{isSubmittedForGrading ? 'Resubmit' : 'Submit'}</span>
-                            </span>
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                    {profile?.role === 'teacher' && user?.id === course.instructor_id && (
-                      <div className="flex gap-2 ml-4">
-                        <Button variant="ghost" size="icon" onClick={() => { setEditAssignmentDialogOpen(true); setEditItem(assignment); }}><Pencil className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm({ type: 'assignment', id: assignment.id })}><Trash className="h-4 w-4 text-red-500" /></Button>
-                      </div>
-                    )}
                   </div>
-                );
-              })}
+                  {profile?.role === 'teacher' && user?.id === course.instructor_id && (
+                    <div className="flex gap-2 ml-4">
+                      <Button variant="ghost" size="icon" onClick={() => { setEditAssignmentDialogOpen(true); setEditItem(assignment); }}><Pencil className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm({ type: 'assignment', id: assignment.id })}><Trash className="h-4 w-4 text-red-500" /></Button>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           ) : (
             <div className="bg-muted/40 rounded-lg p-8 text-center">

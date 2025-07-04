@@ -82,7 +82,7 @@ const SidebarLayout = ({ children }: Props) => {
     // Only show Assignments, Live Classes, Performance to students
     ...(userRole === 'student' ? [
       { icon: <FileText size={20} />, label: 'Assignments', to: '/assignments', roles: ['student'] },
-      { icon: <Video size={20} />, label: 'Live Class', to: '/live-classes', roles: ['student'] },
+      { icon: <Video size={20} />, label: 'Live Classes', to: '/live-classes', roles: ['student'] },
     ] : []),
     { icon: <MessageSquare size={20} />, label: 'AI Suggestions', to: '/ai-suggestions', roles: ['student', 'teacher', 'admin'] },
     { icon: <Bell size={20} />, label: 'Notifications', to: '/notifications', roles: ['student', 'teacher', 'admin'] },
