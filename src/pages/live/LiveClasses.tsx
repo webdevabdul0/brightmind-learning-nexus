@@ -202,10 +202,6 @@ const LiveClassCard = ({ session, handleEdit, handleDelete }: LiveClassCardProps
       <CardFooter className="bg-background">
         <div className="flex justify-between w-full items-center">
           <div className="flex gap-2">
-            <Button variant="outline" size="sm">
-              <Calendar className="h-4 w-4 mr-1" />
-              Remind Me
-            </Button>
             {profile?.role === 'teacher' && user?.id === session.instructor_id && (
               <>
                 <Button variant="ghost" size="icon" onClick={() => handleEdit && handleEdit(session)}><Pencil className="h-4 w-4" /></Button>
@@ -221,7 +217,7 @@ const LiveClassCard = ({ session, handleEdit, handleDelete }: LiveClassCardProps
                   Join Now
                 </>
               ) : (
-                'Register'
+                'Attend'
               )}
             </Button>
           ) : (
