@@ -1,73 +1,98 @@
-# Welcome to your Lovable project
+# 🎓 BrightMind Learning Platform
 
-## Project info
+## 📘 Project Overview
 
-**URL**: https://lovable.dev/projects/71364886-1a96-4292-955e-ee5539904ad9
+**BrightMind** is a modern, fast, and scalable **e-learning platform** built using React and Supabase.  
+It features a **role-based access system** for Admins, Instructors, and Students, allowing secure and personalized content delivery across user types.
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+## 🔗 Live & Source Links
 
-**Use Lovable**
+- 🚀 **Live App**: [https://brighthubmind.netlify.app](https://brighthubmind.netlify.app)
+- 💻 **GitHub Repo**: [https://github.com/webdevabdul0/brightmind-learning-nexus](https://github.com/webdevabdul0/brightmind-learning-nexus)
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/71364886-1a96-4292-955e-ee5539904ad9) and start prompting.
+---
 
-Changes made via Lovable will be committed automatically to this repo.
+## 🚀 Getting Started
 
-**Use your preferred IDE**
+To run the project locally, make sure you have **Node.js** and **npm** installed.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### 🔧 Setup Instructions
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+\`\`\`bash
+# 1. Clone the repository
+git clone https://github.com/webdevabdul0/brightmind-learning-nexus.git
 
-Follow these steps:
+# 2. Navigate to the project directory
+cd brightmind-learning-nexus
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# 3. Install dependencies
+npm install
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# 4. Start the development server
 npm run dev
-```
+\`\`\`
 
-**Edit a file directly in GitHub**
+---
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## 👥 Role-Based Access
 
-**Use GitHub Codespaces**
+The platform includes user roles with distinct access levels:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+- **Admin** – Manage users, courses, and platform settings
+- **Instructor** – Create, edit, and manage course content
+- **Student** – Enroll in and consume courses, track progress
 
-## What technologies are used for this project?
+Authentication and role management is powered by **Supabase Auth + Row Level Security (RLS).**
 
-This project is built with:
+---
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## 🧱 Tech Stack
 
-## How can I deploy this project?
+| Layer         | Tech                           |
+|---------------|--------------------------------|
+| Frontend      | React + Vite + TypeScript      |
+| Styling       | Tailwind CSS + shadcn/ui       |
+| Backend       | Supabase (PostgreSQL + Auth)   |
+| Auth          | Supabase Auth + Role Control   |
+| Deployment    | Netlify                        |
 
-Simply open [Lovable](https://lovable.dev/projects/71364886-1a96-4292-955e-ee5539904ad9) and click on Share -> Publish.
+---
 
-## Can I connect a custom domain to my Lovable project?
+## 🧠 Features
 
-Yes, you can!
+- 🔐 Secure authentication with Supabase
+- 👤 Role-based dashboard views
+- 📚 Course management and content creation
+- 📝 Real-time database updates and storage
+- 🎨 Clean, accessible UI with Tailwind and shadcn/ui
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+---
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+## 🌐 Deployment
+
+The app is deployed on **Netlify**.  
+To deploy your own fork:
+
+1. Push to your own GitHub repo
+2. Link your repo to Netlify
+3. Add environment variables (see below)
+4. Set a custom domain (optional)
+
+---
+
+## 🔐 Environment Variables
+
+Create a `.env` file with the following:
+
+\`\`\`env
+VITE_SUPABASE_URL=your-project-url
+VITE_SUPABASE_ANON_KEY=your-anon-key
+\`\`\`
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](./LICENSE).
